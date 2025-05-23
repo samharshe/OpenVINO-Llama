@@ -1,0 +1,70 @@
+:root {
+    --color-primary-pure-white: #ffffff;
+    --color-primary-electric: #6f3efc;
+    --color-primary-zircon: #21212d;
+
+    --color-secondary-magnesium: #b5b5ba;
+    --color-secondary-aluminum: #e7e5e8;
+    --color-secondary-middle-electric: #bea8fe;
+    --color-secondary-light-electric: #d5dcfe;
+    --color-secondary-basalt: #494657;
+    --color-secondary-asphalt: #747185;
+
+    --color-accent-turbo-green: #b6f7d6;
+    --color-accent-signal-red: #e75426;
+    --color-accent-burnt-orange: #f1c46c;
+
+    --gradient-custom-electric: linear-gradient(to right, var(--color-secondary-light-electric), var(--color-primary-pure-white));
+    --gradient-magnesium: linear-gradient(to left, var(--color-primary-pure-white), var(--color-secondary-magnesium));
+    
+    --typeface-standard: "Manrope", sans-serif;
+}
+
+* {
+    font-family: var(--typeface-standard);
+    color: var(--color-zircon);
+}
+
+.header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 8px 4px;
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 4px 8px -2px #0000001a,0 2px 4px -2px #0000000f;
+}
+
+h3 {
+    margin-right: 4px;
+}
+
+.body {
+    display: flex;
+    max-width: 800px;
+    margin: auto;
+    padding: 50px;
+    flex-direction: column;
+}
+
+.demo-content {
+    margin: auto;
+    margin-top: 70px;
+    padding: 16px;
+    border-radius: 24px;
+    background: var(--gradient-custom-electric);
+}
+
+.header img {
+    height: 80px;
+    width: 80px;
+    margin: 0px;
+}
+
+.under-the-hood-logs {
+    font-family: monospace;
+}
