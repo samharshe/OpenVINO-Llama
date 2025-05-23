@@ -16,7 +16,9 @@
 
     --gradient-custom-electric: linear-gradient(to right, var(--color-secondary-light-electric), var(--color-primary-pure-white));
     --gradient-magnesium: linear-gradient(to left, var(--color-primary-pure-white), var(--color-secondary-magnesium));
-    
+    /* --gradient-custom-rainbow: conic-gradient(from 0deg, #0080ff, #0000ff, #0000ff, #8000ff, #8000ff, #ff00ff, #ff00ff, #ff0080, #ff0080, #0080ff); */
+    --gradient-custom-rainbow: conic-gradient(from 0deg, , );
+
     --typeface-standard: "Manrope", sans-serif;
 }
 
@@ -52,6 +54,16 @@ h1 {
     flex-direction: column;
 }
 
+#user-prompt:focus {
+    outline: none;
+}
+
+.header img {
+    height: 80px;
+    width: 80px;
+    margin: 0px;
+}
+
 .demo-content {
     margin: auto;
     margin-top: 70px;
@@ -63,26 +75,42 @@ h1 {
     position: relative;
 }
 
-#user-prompt {
-    font-family: monospace;
+.input-container {
     position: absolute;
     bottom: 16px;
+    left: 16px;
+    right: 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
     width: calc(100% - 32px);
+}
+
+#user-prompt {
+    font-family: monospace;
     padding: 8px;
     border-radius: 8px;
-    border: none;
-    background: var(--color-primary-pure-white);
     border: 1px solid var(--color-primary-electric);
+    background: var(--color-primary-pure-white);
+    flex: 1;
 }
 
-#user-prompt:focus {
-    outline: none;
+.send-button {
+    font-size: large;
+    padding: 4px 8px;
+    background-color: var(--color-primary-electric);
+    color: var(--color-primary-pure-white);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: var(--typeface-standard);
+    height: 36px;
+    margin-top: 0;
 }
 
-.header img {
-    height: 80px;
-    width: 80px;
-    margin: 0px;
+.send-button:hover {
+    background: var(--gradient-custom-rainbow);
+    outline: white;
 }
 
 .under-the-hood-logs {
