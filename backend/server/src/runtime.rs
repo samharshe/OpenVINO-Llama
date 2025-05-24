@@ -69,7 +69,7 @@ impl WasmInstance
         let ptr = 1008;
         self.memory.write(&mut self.store, ptr, &tensor_bytes)?;
 
-        let infer = self.instance.get_typed_func::<(i32, i32, i32), ()>(&mut self.store, "infer")?;
+        let infer = self.instance.get_typed_func::<(i32, i32, i32), i32>(&mut self.store, "infer")?;
 
         infer.call(&mut self.store, (ptr as i32, tensor_bytes.len() as i32, result_ptr))?;
         let mut result_buf = [0u8; 8];
