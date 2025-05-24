@@ -16,28 +16,50 @@ for dir in "${REQUIRED_DIRS[@]}"; do
   fi
 done
 
+# Initialize PIDs as empty
+BACKEND_PID=""
+FRONTEND_PID=""
+
+cleanup() {
+  echo -e "\nstopping servers..."
+  if [[ -n "$BACKEND_PID" ]]; then
+    kill $BACKEND_PID 2>/dev/null || true
+  fi
+  if [[ -n "$FRONTEND_PID" ]]; then
+    kill $FRONTEND_PID 2>/dev/null || true
+  fi
+  wait
+  echo "servers stopped."
+}
+trap cleanup INT TERM
+
 echo "starting Rust backend..."
 cd "$SCRIPT_DIR/backend"
-make inferencer-build
+if ! make inferencer-build; then
+  echo "error: failed to build inferencer" >&2
+  exit 1
+fi
+
 cd server
 cargo run &
 BACKEND_PID=$!
+if ! kill -0 $BACKEND_PID 2>/dev/null; then
+  echo "error: failed to start backend server" >&2
+  exit 1
+fi
 
 echo "starting frontend server..."
 cd "$SCRIPT_DIR/old_frontend"
 python3 -m http.server 8000 &
 FRONTEND_PID=$!
+if ! kill -0 $FRONTEND_PID 2>/dev/null; then
+  echo "error: failed to start frontend server" >&2
+  kill $BACKEND_PID 2>/dev/null || true
+  exit 1
+fi
 
-echo -e "\n\033[1mBackend running on http://localhost:3000\033[0m"
-echo -e "\033[1mFrontend running on http://localhost:8000\033[0m"
-echo "Press Ctrl+C to stop both servers"
-
-cleanup() {
-  echo -e "\nstopping servers..."
-  kill $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
-  wait
-  echo "servers stopped."
-}
-trap cleanup INT TERM
+echo -e "\n\033[1mbackend running on http://localhost:3000\033[0m"
+echo -e "\033[1mfrontend running on http://localhost:8000\033[0m"
+echo "press Ctrl+C to stop both servers"
 
 wait
