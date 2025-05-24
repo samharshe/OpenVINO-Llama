@@ -16,9 +16,6 @@
 
     --gradient-custom-electric: linear-gradient(to right, var(--color-secondary-light-electric), var(--color-primary-pure-white));
     --gradient-magnesium: linear-gradient(to left, var(--color-primary-pure-white), var(--color-secondary-magnesium));
-    /* --gradient-custom-rainbow: conic-gradient(from 0deg, #0080ff, #0000ff, #0000ff, #8000ff, #8000ff, #ff00ff, #ff00ff, #ff0080, #ff0080, #0080ff); */
-    --gradient-custom-rainbow: conic-gradient(from 0deg, , );
-
     --typeface-standard: "Manrope", sans-serif;
 }
 
@@ -106,11 +103,6 @@ h1 {
     font-family: var(--typeface-standard);
     height: 36px;
     margin-top: 0;
-}
-
-.send-button:hover {
-    background: var(--gradient-custom-rainbow);
-    outline: white;
 }
 
 .under-the-hood-logs {
