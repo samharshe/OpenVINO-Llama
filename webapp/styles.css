@@ -124,6 +124,7 @@ h1 {
     border-radius: 16px;
     word-wrap: break-word;
     line-height: 1.4;
+    font-size: 14px;
 }
 
 .user-message {

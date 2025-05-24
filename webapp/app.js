@@ -28,11 +28,13 @@ function addMessage(content, isUser = false) {
         welcomeMessage.remove();
     }
     
-    chatHistory.insertBefore(messageDiv, chatHistory.firstChild);
-    chatHistory.scrollTop = 0;
+    chatHistory.appendChild(messageDiv);
+    chatHistory.scrollTop = chatHistory.scrollHeight;
+    
+    return messageDiv;
 }
 
-chatForm.addEventListener('submit', function(e) {
+chatForm.addEventListener('submit', async function(e) {
     e.preventDefault();
     
     const userMessage = userPromptInput.value.trim();
@@ -41,5 +43,28 @@ chatForm.addEventListener('submit', function(e) {
     addMessage(userMessage, true);
     userPromptInput.value = '';
     
-    addMessage('Processing your request...', false);
+    const processingMessage = addMessage('Processing your request...', false);
+    
+    try {
+        const response = await fetch(`${serverURL}/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ message: userMessage })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        processingMessage.remove();
+        addMessage(data.response, false);
+        
+    } catch (error) {
+        console.error('Error:', error);
+        processingMessage.textContent = 'Error: Could not connect to server';
+    }
 });
