@@ -16,7 +16,6 @@ for dir in "${REQUIRED_DIRS[@]}"; do
   fi
 done
 
-# Initialize PIDs as empty
 BACKEND_PID=""
 FRONTEND_PID=""
 
@@ -33,7 +32,7 @@ cleanup() {
 }
 trap cleanup INT TERM
 
-echo "starting Rust backend..."
+echo "starting Rust backend with auto-reload..."
 cd "$SCRIPT_DIR/backend"
 if ! make inferencer-build; then
   echo "error: failed to build inferencer" >&2
@@ -41,16 +40,20 @@ if ! make inferencer-build; then
 fi
 
 cd server
+echo "starting backend server with watchexec..."
 cargo run &
 BACKEND_PID=$!
 if ! kill -0 $BACKEND_PID 2>/dev/null; then
   echo "error: failed to start backend server" >&2
   exit 1
 fi
+echo "backend server started with PID: $BACKEND_PID"
+
+echo "waiting for backend server to be ready..."
 
 echo "starting frontend server..."
 cd "$SCRIPT_DIR/old_frontend"
-python3 -m http.server 8000 &
+npx live-server --port=8000 &
 FRONTEND_PID=$!
 if ! kill -0 $FRONTEND_PID 2>/dev/null; then
   echo "error: failed to start frontend server" >&2

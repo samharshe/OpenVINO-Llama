@@ -127,7 +127,9 @@ async fn logs(
         .header(header::CONTENT_TYPE, "text/event-stream")
         .header(header::CACHE_CONTROL, "no-cache")
         .header(header::CONNECTION, "keep-alive")
-        .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "http://localhost:8000")
+        .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+        .header(header::ACCESS_CONTROL_ALLOW_METHODS, "GET, OPTIONS")
+        .header(header::ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, x-session-id")
         .body(BoxBody::new(body))?;
 
     Ok(response)
@@ -141,7 +143,7 @@ async fn serve(
     if request.method() == Method::OPTIONS {
         return Ok(Response::builder()
             .status(StatusCode::OK)
-            .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "http://localhost:8000")
+            .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
             .header(header::ACCESS_CONTROL_ALLOW_METHODS, "POST, OPTIONS, GET")
             .header(header::ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, x-session-id")
             .body(full(""))
@@ -158,7 +160,7 @@ async fn serve(
     };
 
     let headers = response.headers_mut();
-    headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, "http://localhost:8000".parse().unwrap());
+    headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*".parse().unwrap());
     headers.insert(header::ACCESS_CONTROL_ALLOW_METHODS, "POST, OPTIONS, GET".parse().unwrap());
     headers.insert(header::ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, x-session-id".parse().unwrap());
 
