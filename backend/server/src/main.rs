@@ -20,7 +20,7 @@ use hyper::{
 };
 use hyper_util::rt::{TokioIo, TokioTimer};
 use runtime::WasmInstance;
-use model_config::ImageModelConfig;
+use model_config::{ImageModelConfig, ModelInfo, ModelType};
 use tokio::{
     net::TcpListener,
     sync::{
@@ -65,6 +65,11 @@ async fn infer(
         let (sender, receiver) = oneshot::channel();
         inference_thread_sender.send(InferenceRequest {
             tensor_bytes: tensor,
+            model_info: ModelInfo {
+                name: "mobilenet_v3_large".to_string(),
+                version: "1.0".to_string(),
+                model_type: ModelType::Image,
+            },
             responder: sender,
         })?;
 
