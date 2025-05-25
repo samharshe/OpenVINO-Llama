@@ -70,21 +70,12 @@ async fn infer(
         log_sender.send("[server/main.rs] (No logs during inference because this is performed by WASM module.)".to_string()).ok();
         return match receiver.await {
             Ok(response) => {
-                let r = match serde_json::to_string(&response) {
-                    Ok(json) => {
-                        log_sender.send(format!("[server/main.rs] Inference result: [label={}, probability={:.5}].", response.0, response.1)).ok();
-                        log_sender.send("[server/main.rs] Inference successful. Sending response.".to_string()).ok();
-                        Response::builder().header(header::CONTENT_TYPE, "application/json").body(full(json)).unwrap()
-                    },
-                    Err(_) => {
-                        log_sender.send("[server/main.rs] Error serializing inference response.".to_string()).ok();
-                        Response::builder()
-                        .status(StatusCode::INTERNAL_SERVER_ERROR)
-                        .body(full(INTERNAL_SERVER_ERROR))
-                        .unwrap()
-                    },
-                };
-                Ok(r)
+                let json = serde_json::to_string(&response).unwrap_or_else(|_| {
+                    log_sender.send("[server/main.rs] Error serializing inference response.".to_string()).ok();
+                    "{}".to_string()
+                });
+                log_sender.send("[server/main.rs] Inference successful. Sending response.".to_string()).ok();
+                Ok(Response::builder().header(header::CONTENT_TYPE, "application/json").body(full(json)).unwrap())
             },
             Err(_) => {
                 log_sender.send("[server/main.rs] Inference task failed or channel closed.".to_string()).ok();

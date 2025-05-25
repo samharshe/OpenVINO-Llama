@@ -31,17 +31,18 @@ async fn test_image_classification_preserves_functionality() {
         
         let json: Value = resp.json().await.expect("Response should be valid JSON");
         
-        // Response should be array with [index, probability]
-        assert!(json.is_array());
-        let arr = json.as_array().unwrap();
-        assert_eq!(arr.len(), 2);
+        // Response should be object with output, metadata, and model_info
+        assert!(json.is_object());
+        let obj = json.as_object().unwrap();
         
-        // First element should be number (index), second should be number (probability)
-        assert!(arr[0].is_number());
-        assert!(arr[1].is_number());
+        // Should have the three required top-level fields
+        assert!(obj.contains_key("output"));
+        assert!(obj.contains_key("metadata"));
+        assert!(obj.contains_key("model_info"));
         
-        let probability = arr[1].as_f64().unwrap();
-        assert!(probability >= 0.0 && probability <= 1.0);
+        // Output should contain the actual inference result
+        let output = &obj["output"];
+        assert!(!output.is_null());
     }
 }
 
