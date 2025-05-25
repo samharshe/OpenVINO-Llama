@@ -64,10 +64,13 @@ Transform existing v0.1 image classification prototype into a clean, flexible un
 - [x] **ALREADY DONE**: Restructured response format to JSON with output/metadata/model_info
 
 #### Afternoon: Architecture Abstraction **← CURRENT WORK**
-- [ ] **IN PROGRESS**: Design `ModelConfig` trait system for flexibility
-- [ ] Extract model configuration from hard-coded values  
-- [ ] Create abstract preprocessing pipeline
-- [ ] Refactor WASM interface to be model-agnostic
+- [x] **COMPLETED**: Design `ModelConfig` trait system for flexibility
+- [x] **COMPLETED**: Implement ImageModelConfig wrapper (with hardcoded values)
+- [x] **COMPLETED**: Implement TextModelConfig placeholder
+- [ ] **NEXT**: Extract model configuration from hard-coded values  
+- [ ] **LATER**: Create abstract preprocessing pipeline
+- [ ] **LATER**: Refactor WASM interface to be model-agnostic
+- [ ] **FINAL**: Update server routing to use trait instead of hardcoded inference
 
 **Tests Pass**: Image classification still works through new architecture (test already validates JSON format)
 
@@ -379,18 +382,22 @@ Create `models.json` configuration file:
 }
 ```
 
-### Implementation Steps **← CURRENT AFTERNOON WORK**
+### Implementation Steps Progress **← CURRENT STATUS**
 
 **Starting Point**: We have a working image classification system that returns proper JSON format with tests passing.
 
-1. **IN PROGRESS**: Define trait and error types in `src/model_config.rs`
-2. **TODAY**: Implement ImageModelConfig that wraps existing WASM inference
-3. **TODAY**: Implement TextModelConfig as placeholder (returns mock responses)
-4. **TODAY**: Create ModelRegistry to load from JSON config
-5. **TODAY**: Update server routing to use trait instead of hardcoded inference
-6. **OPTIONAL**: Add model selection endpoint `GET /models`
+1. ✅ **COMPLETED**: Define trait and error types in `src/model_config.rs`
+2. ✅ **COMPLETED**: Implement ImageModelConfig that wraps existing WASM inference (with hardcoded values)
+3. ✅ **COMPLETED**: Implement TextModelConfig as placeholder (returns mock responses)
+4. **NEXT**: Extract hardcoded values from ImageModelConfig to make it configurable ← **CURRENT TASK**
+5. **LATER**: Create abstract preprocessing pipeline (remove hardcoded `tensor::jpeg_to_raw_bgr` call)
+6. **LATER**: Update server routing to use trait instead of hardcoded inference
+7. **OPTIONAL**: Create ModelRegistry to load from JSON config
+8. **OPTIONAL**: Add model selection endpoint `GET /models`
 
-**GOAL**: Complete ModelConfig trait system and multi-model support by end of afternoon while keeping all tests green.
+**CURRENT STATE**: ModelConfig trait exists but still has hardcoded values and preprocessing logic.
+
+**IMMEDIATE GOAL**: Extract hardcoded model metadata (name, version) to make ImageModelConfig configurable.
 
 ### Testing Requirements
 
@@ -404,19 +411,21 @@ Current test status:
 
 ### Current System Status
 
-**RESPONSE FORMAT ALREADY UPDATED** ✅: The system already returns the new JSON structure:
-```json
-{
-  "output": "golden retriever",  // human-readable class name  
-  "metadata": {
-    "probability": 0.8234
-  },
-  "model_info": {
-    "name": "mobilenet_v3_large"
-  }
-}
-```
-**Integration test confirms this format and MUST remain green during refactor.**
+**RESPONSE FORMAT ALREADY UPDATED** ✅: The system already returns the new JSON structure.
+
+**MODELCONFIG TRAIT FOUNDATION READY** ✅: Basic trait system implemented with:
+- ✅ Core trait definition and error types
+- ✅ ImageModelConfig wrapper (but with hardcoded values)
+- ✅ TextModelConfig placeholder
+
+**CURRENT LIMITATIONS** ❌:
+- ImageModelConfig has hardcoded name/version ("mobilenet_v3_large", "1.0")
+- Preprocessing still hardcoded (`tensor::jpeg_to_raw_bgr()` call)
+- Server still uses original hardcoded logic, doesn't use trait yet
+
+**NEXT**: Extract hardcoded values to make ImageModelConfig configurable with constructor parameters.
+
+**Integration test confirms current format and MUST remain green during refactor.**
 
 ### Critical Implementation Notes
 
@@ -431,7 +440,10 @@ Current test status:
 
 - [x] `cargo test` passes with current architecture ✅
 - [x] Image classification returns new JSON format ✅ 
-- [ ] **TODAY'S GOAL**: Text inference returns placeholder responses
-- [ ] **TODAY'S GOAL**: Models load from JSON configuration  
+- [x] **COMPLETED**: Text inference returns placeholder responses (trait level) ✅
+- [ ] **CURRENT GOAL**: Extract hardcoded values to make ImageModelConfig configurable
+- [ ] **LATER**: Create abstract preprocessing pipeline
+- [ ] **LATER**: Server uses ModelConfig trait instead of hardcoded logic
+- [ ] **OPTIONAL**: Models load from JSON configuration
 - [x] Server routes based on Content-Type detection ✅
 - [x] All error cases return proper HTTP status codes ✅
