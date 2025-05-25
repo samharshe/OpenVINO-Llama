@@ -51,18 +51,24 @@ pub struct ImageModelConfig {
     engine: Arc<Engine>,
     module: Arc<Module>,
     log_sender: broadcast::Sender<String>,
+    name: String,
+    version: String,
 }
 
 impl ImageModelConfig {
     pub fn new(
         engine: Arc<Engine>, 
         module: Arc<Module>,
-        log_sender: broadcast::Sender<String>
+        log_sender: broadcast::Sender<String>,
+        name: String,
+        version: String,
     ) -> Self {
         Self {
             engine,
             module,
             log_sender,
+            name,
+            version,
         }
     }
 }
@@ -98,8 +104,8 @@ impl ModelConfig for ImageModelConfig {
     
     fn model_info(&self) -> ModelInfo {
         ModelInfo {
-            name: "mobilenet_v3_large".to_string(),
-            version: "1.0".to_string(),
+            name: self.name.clone(),
+            version: self.version.clone(),
             model_type: ModelType::Image,
         }
     }
