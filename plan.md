@@ -204,3 +204,215 @@ fn model_switching_preserves_functionality() {
 5. **Document**: Update docs and plan next day
 
 This plan prioritizes building a clean, flexible demo that showcases the architecture while maintaining working functionality throughout development.
+
+---
+
+## ModelConfig Trait Specification
+
+**CRITICAL**: This section defines the exact interface and behavior required for the flexible model architecture. Follow this specification exactly.
+
+### Overview
+The `ModelConfig` trait abstracts different model types (image, text) behind a unified interface. Each model handles its own preprocessing, inference, and postprocessing while the server routes requests based on data type detection.
+
+### Core Trait Definition
+
+```rust
+pub trait ModelConfig: Send + Sync {
+    /// Validates input data format and size
+    fn validate_input(&self, data: &[u8]) -> Result<(), ValidationError>;
+    
+    /// Performs complete inference pipeline: preprocess -> infer -> postprocess
+    fn infer(&self, data: &[u8]) -> Result<serde_json::Value, InferenceError>;
+    
+    /// Returns model metadata for responses
+    fn model_info(&self) -> ModelInfo;
+}
+```
+
+### Required Error Types
+
+```rust
+#[derive(Debug)]
+pub enum ValidationError {
+    InvalidFormat,      // Wrong data format (not JPEG, not text, etc.)
+    InvalidSize,        // Data too large/small
+    InvalidDimensions,  // Wrong tensor dimensions
+    MalformedData,      // Corrupted or incomplete data
+}
+
+#[derive(Debug)]
+pub enum InferenceError {
+    PreprocessingFailed(String),
+    ModelLoadFailed(String),
+    InferenceFailed(String),
+    PostprocessingFailed(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ModelType {
+    Image,
+    Text,
+    Multimodal,
+}
+
+#[derive(Debug, Clone)]
+pub struct ModelInfo {
+    pub name: String,
+    pub version: String,
+    pub model_type: ModelType,
+}
+```
+
+### Response Format Contract
+
+**MANDATORY**: All models MUST return JSON in this exact structure:
+
+```json
+{
+  "output": <model-specific-result>,
+  "metadata": {
+    // model-specific metadata - no required fields
+  },
+  "model_info": {
+    "name": <string>,
+    "version": <string>,
+    "model_type": "Image" | "Text" | "Multimodal"
+  }
+}
+```
+
+**Note**: The `metadata` object is model-specific and has no required fields. Each model type defines its own relevant metadata.
+
+### Implementation Requirements
+
+#### ImageModelConfig
+- **Input validation**: Must detect JPEG magic bytes (`FF D8 FF`)
+- **Preprocessing**: JPEG → BGR tensor (224x224x3, normalized to [0,1])
+- **Output format**: 
+  ```json
+  {
+    "output": "golden retriever",  // human-readable class name
+    "metadata": {
+      "probability": 0.8234,
+      "class_index": 207
+    },
+    "model_info": {
+      "name": "mobilenet_v3_large",
+      "version": "1.0",
+      "model_type": "Image"
+    }
+  }
+  ```
+
+#### TextModelConfig  
+- **Input validation**: Must validate UTF-8 text, max length limits
+- **Preprocessing**: Text → tokens → tensor
+- **Output format**:
+  ```json
+  {
+    "output": "The quick brown fox jumps over the lazy dog.",
+    "metadata": {
+      "token_count": 12,
+      "inference_time_ms": 45,
+      "temperature": 0.7
+    },
+    "model_info": {
+      "name": "llama2_7b",
+      "version": "2.0", 
+      "model_type": "Text"
+    }
+  }
+  ```
+
+### Server Integration Requirements
+
+#### Data Type Detection
+The server MUST route requests to the correct model based on Content-Type:
+
+```rust
+fn detect_model_type(content_type: &str, data: &[u8]) -> Option<ModelType> {
+    match content_type {
+        "image/jpeg" => Some(ModelType::Image),
+        "text/plain" => Some(ModelType::Text),
+        _ => None
+    }
+}
+```
+
+#### Model Registry JSON Format
+Create `models.json` configuration file:
+
+```json
+{
+  "models": {
+    "default_image": {
+      "type": "image",
+      "config": {
+        "model_path": "fixture/model.xml",
+        "weights_path": "fixture/model.bin",
+        "input_size": [224, 224],
+        "mean": [0.485, 0.456, 0.406],
+        "std": [0.229, 0.224, 0.225]
+      },
+      "info": {
+        "name": "mobilenet_v3_large",
+        "version": "1.0",
+        "model_type": "Image"
+      }
+    },
+    "default_text": {
+      "type": "text", 
+      "config": {
+        "model_path": "models/llama2.xml",
+        "weights_path": "models/llama2.bin",
+        "max_length": 512,
+        "temperature": 0.7
+      },
+      "info": {
+        "name": "llama2_7b",
+        "version": "2.0",
+        "model_type": "Text"
+      }
+    }
+  }
+}
+```
+
+### Implementation Steps
+
+1. **Define trait and error types** in `src/model_config.rs`
+2. **Implement ImageModelConfig** that wraps existing WASM inference
+3. **Implement TextModelConfig** as placeholder (returns mock responses)
+4. **Create ModelRegistry** to load from JSON config
+5. **Update server routing** to use trait instead of hardcoded inference
+6. **Add model selection endpoint** `GET /models` (optional)
+
+### Testing Requirements
+
+Update existing characterization tests to work with new architecture:
+- All tests MUST continue passing
+- Add new tests for each model type
+- Test error handling for invalid inputs
+- Test model registry loading
+
+### Backward Compatibility
+
+**BREAKING CHANGE ACKNOWLEDGED**: The response format changes from `[index, probability]` to the new JSON structure. This is intentional and required.
+
+### Critical Implementation Notes
+
+1. **Thread Safety**: All models must be `Send + Sync`
+2. **Error Handling**: Use `Result` types consistently, never panic
+3. **Memory Management**: Keep it simple, no explicit cleanup
+4. **Configuration**: All model parameters come from JSON registry
+5. **Preprocessing**: Each model handles its own preprocessing completely
+6. **One Model Per Thread**: No concurrent inference on same model instance
+
+### Success Criteria
+
+- [ ] `cargo test` passes with new architecture
+- [ ] Image classification returns new JSON format  
+- [ ] Text inference returns placeholder responses
+- [ ] Models load from JSON configuration
+- [ ] Server routes based on Content-Type detection
+- [ ] All error cases return proper HTTP status codes

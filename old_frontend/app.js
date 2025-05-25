@@ -59,8 +59,8 @@ document.querySelectorAll('.gallery img').forEach(img => {
             }
 
             const result = await serverResponse.json();
-            const [labelIndex, confidence] = result;
-            const label = imageLabels[labelIndex];
+            label = result?.output ?? 'unknown';
+            confidence = result?.metadata?.probability ?? 0;
 
             outputElement.innerHTML = `mobilenet_v2_1 identified a ${label} with ${(confidence*100).toFixed(2)}% confidence.`;
             
