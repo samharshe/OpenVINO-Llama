@@ -7,7 +7,7 @@ Transform existing v0.1 image classification prototype into a clean, flexible un
 - **Demo Focus**: Clean, extensible demonstration system (not production service)
 - **Timeline**: 3-5 days of intense, focused work
 - **Environment**: Local development only (localhost)
-- **Frontend**: Simple webapp in `/webapp` that sends HTTP requests
+- **Frontend**: Simple webapp in `/old_frontend` that sends HTTP requests
 - **Models**: Support any OpenVINO IR format model of each type
 
 ## Core Principles
