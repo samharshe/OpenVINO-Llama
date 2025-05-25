@@ -1,3 +1,4 @@
+pub mod model_config;
 pub mod runtime;
 pub mod tensor;
 pub mod utils;
