@@ -104,3 +104,60 @@ impl ModelConfig for ImageModelConfig {
         }
     }
 }
+
+pub struct TextModelConfig {
+    name: String,
+    version: String,
+}
+
+impl TextModelConfig {
+    pub fn new(name: String, version: String) -> Self {
+        Self { name, version }
+    }
+}
+
+impl ModelConfig for TextModelConfig {
+    fn validate_input(&self, data: &[u8]) -> Result<(), ValidationError> {
+        // Validate UTF-8 text
+        if std::str::from_utf8(data).is_err() {
+            return Err(ValidationError::InvalidFormat);
+        }
+        
+        // Check reasonable size limits (max 10KB for demo)
+        if data.len() > 10240 {
+            return Err(ValidationError::InvalidSize);
+        }
+        
+        Ok(())
+    }
+    
+    fn infer(&self, data: &[u8]) -> Result<serde_json::Value, InferenceError> {
+        let input_text = std::str::from_utf8(data)
+            .map_err(|e| InferenceError::PreprocessingFailed(e.to_string()))?;
+        
+        // Mock response following the required JSON structure
+        let response = serde_json::json!({
+            "output": format!("Mock response to: {}", input_text),
+            "metadata": {
+                "token_count": input_text.split_whitespace().count(),
+                "inference_time_ms": 42,
+                "temperature": 0.7
+            },
+            "model_info": {
+                "name": self.name,
+                "version": self.version,
+                "model_type": "Text"
+            }
+        });
+        
+        Ok(response)
+    }
+    
+    fn model_info(&self) -> ModelInfo {
+        ModelInfo {
+            name: self.name.clone(),
+            version: self.version.clone(),
+            model_type: ModelType::Text,
+        }
+    }
+}
