@@ -4,8 +4,6 @@ use anyhow::Result;
 use wasmtime::{Engine, Instance, Linker, Memory, Module, Store};
 use wasmtime_wasi::{preview1::WasiP1Ctx, DirPerms, FilePerms, WasiCtxBuilder};
 use wasmtime_wasi_nn::{backend::openvino::OpenvinoBackend, witx::WasiNnCtx, Backend, InMemoryRegistry};
-
-use super::utils::InferenceResult;
 use serde_json::Value;
 
 struct Context
