@@ -3,7 +3,6 @@ use http_body_util::{BodyExt, Full};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::oneshot;
-use crate::model_config::ModelInfo;
 
 type GenericError = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, GenericError>;
@@ -21,6 +20,5 @@ pub struct InferenceResult(pub u32, pub f32);
 pub struct InferenceRequest
 {
     pub tensor_bytes: Vec<u8>,
-    pub model_info: ModelInfo,
     pub responder: oneshot::Sender<Value>,
 }
