@@ -1,6 +1,7 @@
 mod runtime;
 mod tensor;
 mod utils;
+mod model_config;
 
 use std::{net::SocketAddr, path::Path, sync::Arc};
 
@@ -19,6 +20,7 @@ use hyper::{
 };
 use hyper_util::rt::{TokioIo, TokioTimer};
 use runtime::WasmInstance;
+use model_config::ImageModelConfig;
 use tokio::{
     net::TcpListener,
     sync::{
@@ -173,6 +175,16 @@ pub async fn main() -> anyhow::Result<()>
         let engine = Arc::new(Engine::new(&Config::new()).unwrap());
         let module =
             Arc::new(Module::from_file(&engine, Path::new("../target/wasm32-wasip1/debug/inferencer.wasm")).unwrap());
+        
+        // Create ImageModelConfig instance
+        let model_config = ImageModelConfig::new(
+            engine.clone(),
+            module.clone(),
+            log_tx_inference.clone(),
+            "mobilenet_v3_large".to_string(),
+            "1.0".to_string()
+        );
+        
         while let Some(request) = rx.recv().await {
             let engine = Arc::clone(&engine);
             let module = Arc::clone(&module);
