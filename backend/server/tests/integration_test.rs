@@ -31,13 +31,13 @@ async fn test_image_classification_preserves_functionality() {
         
         let json: Value = resp.json().await.expect("Response should be valid JSON");
         
-        // Response should be array with [label, probability]
+        // Response should be array with [index, probability]
         assert!(json.is_array());
         let arr = json.as_array().unwrap();
         assert_eq!(arr.len(), 2);
         
-        // First element should be string (label), second should be number (probability)
-        assert!(arr[0].is_string());
+        // First element should be number (index), second should be number (probability)
+        assert!(arr[0].is_number());
         assert!(arr[1].is_number());
         
         let probability = arr[1].as_f64().unwrap();
