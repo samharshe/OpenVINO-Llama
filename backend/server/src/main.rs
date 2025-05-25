@@ -19,8 +19,7 @@ use hyper::{
     StatusCode
 };
 use hyper_util::rt::{TokioIo, TokioTimer};
-use runtime::WasmInstance;
-use model_config::{ImageModelConfig, ModelInfo, ModelType};
+use model_config::{ImageModelConfig, ModelInfo, ModelType, ModelConfig};
 use tokio::{
     net::TcpListener,
     sync::{
@@ -182,20 +181,19 @@ pub async fn main() -> anyhow::Result<()>
             Arc::new(Module::from_file(&engine, Path::new("../target/wasm32-wasip1/debug/inferencer.wasm")).unwrap());
         
         // Create ImageModelConfig instance
-        let model_config = ImageModelConfig::new(
+        let model_config = Arc::new(ImageModelConfig::new(
             engine.clone(),
             module.clone(),
             log_tx_inference.clone(),
             "mobilenet_v3_large".to_string(),
             "1.0".to_string()
-        );
+        ));
         
         while let Some(request) = rx.recv().await {
-            let engine = Arc::clone(&engine);
-            let module = Arc::clone(&module);
+            let model_config = Arc::clone(&model_config);
             spawn_blocking(move || -> anyhow::Result<()> {
-                let mut instance = WasmInstance::new(engine, module)?;
-                let result = instance.infer(request.tensor_bytes).unwrap();
+                let result = model_config.infer(&request.tensor_bytes)
+                    .expect("Inference failed");
                 request.responder.send(result).unwrap();
                 Ok(())
             });

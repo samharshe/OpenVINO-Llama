@@ -4,7 +4,6 @@ use wasmtime::{Engine, Module};
 use tokio::sync::broadcast;
 
 use crate::runtime::WasmInstance;
-use crate::tensor;
 
 #[derive(Debug)]
 pub enum ValidationError {
@@ -88,15 +87,14 @@ impl ModelConfig for ImageModelConfig {
     }
     
     fn infer(&self, data: &[u8]) -> Result<serde_json::Value, InferenceError> {
-        // Preprocess: JPEG to tensor
-        let tensor_bytes = tensor::jpeg_to_raw_bgr(data.to_vec(), &self.log_sender)
-            .map_err(|e| InferenceError::PreprocessingFailed(e.to_string()))?;
+        // For now, data is already tensor bytes (preprocessing done by server)
+        // TODO: Move preprocessing here when we refactor preprocessing pipeline
         
         // Create WASM instance and run inference
         let mut wasm_instance = WasmInstance::new(self.engine.clone(), self.module.clone())
             .map_err(|e| InferenceError::ModelLoadFailed(e.to_string()))?;
         
-        let result = wasm_instance.infer(tensor_bytes)
+        let result = wasm_instance.infer(data.to_vec())
             .map_err(|e| InferenceError::InferenceFailed(e.to_string()))?;
         
         Ok(result)
