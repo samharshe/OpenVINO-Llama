@@ -1,4 +1,3 @@
-use reqwest;
 use serde_json::Value;
 use std::fs;
 
@@ -18,7 +17,7 @@ async fn test_image_classification_preserves_functionality() {
     
     // Send POST request to /infer endpoint
     let response = client
-        .post(&format!("{}/infer", SERVER_URL))
+        .post(format!("{}/infer", SERVER_URL))
         .header("Content-Type", "image/jpeg")
         .body(image_data)
         .send()
@@ -51,7 +50,7 @@ async fn test_server_cors_headers() {
     let client = reqwest::Client::new();
     
     let response = client
-        .request(reqwest::Method::OPTIONS, &format!("{}/infer", SERVER_URL))
+        .request(reqwest::Method::OPTIONS, format!("{}/infer", SERVER_URL))
         .send()
         .await;
     
@@ -68,7 +67,7 @@ async fn test_unsupported_content_type() {
     let client = reqwest::Client::new();
     
     let response = client
-        .post(&format!("{}/infer", SERVER_URL))
+        .post(format!("{}/infer", SERVER_URL))
         .header("Content-Type", "text/plain")
         .body("not an image")
         .send()
@@ -84,7 +83,7 @@ async fn test_missing_content_type() {
     let client = reqwest::Client::new();
     
     let response = client
-        .post(&format!("{}/infer", SERVER_URL))
+        .post(format!("{}/infer", SERVER_URL))
         .body("some data")
         .send()
         .await;
@@ -99,7 +98,7 @@ async fn test_logs_endpoint() {
     let client = reqwest::Client::new();
     
     let response = client
-        .get(&format!("{}/logs", SERVER_URL))
+        .get(format!("{}/logs", SERVER_URL))
         .send()
         .await;
     

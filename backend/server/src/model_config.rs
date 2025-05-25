@@ -6,6 +6,7 @@ use tokio::sync::broadcast;
 use crate::runtime::WasmInstance;
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum ValidationError {
     InvalidFormat,
     InvalidSize,
@@ -14,6 +15,8 @@ pub enum ValidationError {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
+#[allow(clippy::enum_variant_names)]
 pub enum InferenceError {
     PreprocessingFailed(String),
     ModelLoadFailed(String),
@@ -29,12 +32,14 @@ pub enum ModelType {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ModelInfo {
     pub name: String,
     pub version: String,
     pub model_type: ModelType,
 }
 
+#[allow(dead_code)]
 pub trait ModelConfig: Send + Sync {
     /// Validates input data format and size
     fn validate_input(&self, data: &[u8]) -> Result<(), ValidationError>;
@@ -49,7 +54,7 @@ pub trait ModelConfig: Send + Sync {
 pub struct ImageModelConfig {
     engine: Arc<Engine>,
     module: Arc<Module>,
-    log_sender: broadcast::Sender<String>,
+    _log_sender: broadcast::Sender<String>,
     name: String,
     version: String,
 }
@@ -65,7 +70,7 @@ impl ImageModelConfig {
         Self {
             engine,
             module,
-            log_sender,
+            _log_sender: log_sender,
             name,
             version,
         }
@@ -115,6 +120,7 @@ pub struct TextModelConfig {
 }
 
 impl TextModelConfig {
+    #[allow(dead_code)]
     pub fn new(name: String, version: String) -> Self {
         Self { name, version }
     }
