@@ -19,6 +19,6 @@ pub struct InferenceResult(pub u32, pub f32);
 #[derive(Debug)]
 pub struct InferenceRequest
 {
-    pub tensor_bytes: Vec<u8>,
+    pub data: Vec<u8>,
     pub responder: oneshot::Sender<Value>,
 }

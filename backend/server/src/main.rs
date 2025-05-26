@@ -1,7 +1,3 @@
-mod runtime;
-mod tensor;
-mod utils;
-mod model_config;
 
 use std::{net::SocketAddr, path::Path, sync::Arc};
 
@@ -19,7 +15,7 @@ use hyper::{
     StatusCode
 };
 use hyper_util::rt::{TokioIo, TokioTimer};
-use model_config::{ImageModelConfig, ModelConfig};
+use server::model_config::{ImageModelConfig, ModelConfig};
 use tokio::{
     net::TcpListener,
     sync::{
@@ -29,7 +25,7 @@ use tokio::{
     },
     task::spawn_blocking,
 };
-use utils::{full, BoxBody, InferenceRequest, Result};
+use server::utils::{full, BoxBody, InferenceRequest, Result};
 use wasmtime::{Config, Engine, Module};
 use futures::stream::{StreamExt};
 use http_body_util::StreamBody;
@@ -59,15 +55,14 @@ async fn infer(
         let mut body = request.collect().await?.aggregate();
         let bytes = body.copy_to_bytes(body.remaining());
 
-        log_sender.send("[server/main.rs] Processing image for inference.".to_string()).ok();
-        let tensor = tensor::jpeg_to_raw_bgr(bytes.to_vec(), &log_sender).unwrap();
+        log_sender.send("[server/main.rs] Forwarding raw JPEG data to model for processing.".to_string()).ok();
         let (sender, receiver) = oneshot::channel();
         inference_thread_sender.send(InferenceRequest {
-            tensor_bytes: tensor,
+            data: bytes.to_vec(),
             responder: sender,
         })?;
 
-        log_sender.send("[server/main.rs] Passed tensor to inferencer. Waiting for inference result.".to_string()).ok();
+        log_sender.send("[server/main.rs] Passed raw JPEG data to inferencer. Waiting for inference result.".to_string()).ok();
         log_sender.send("[server/main.rs] (No logs during inference because this is performed by WASM module.)".to_string()).ok();
         return match receiver.await {
             Ok(response) => {
@@ -187,7 +182,7 @@ pub async fn main() -> anyhow::Result<()>
         while let Some(request) = rx.recv().await {
             let model_config = Arc::clone(&model_config);
             spawn_blocking(move || -> anyhow::Result<()> {
-                let result = model_config.infer(&request.tensor_bytes)
+                let result = model_config.infer(&request.data)
                     .expect("Inference failed");
                 request.responder.send(result).unwrap();
                 Ok(())

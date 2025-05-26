@@ -76,17 +76,27 @@ Transform existing v0.1 image classification prototype into a clean, flexible un
 ### Day 2: Multi-Model Support
 **Goal**: Add text models alongside existing image classification
 
-#### Morning: Text Infrastructure
+#### Morning: WASM Abstraction & Preprocessing ✅ COMPLETED
+- [x] Abstract WASM interface to be model-agnostic
+  - [x] Created model registry system in WASM (`registry.rs`)
+  - [x] Removed hardcoded ImageNet labels from main.rs
+  - [x] Added complete ImageNet labels module (`imagenet_labels.rs`)
+  - [x] Implemented new WASM exports: `register_model()` and `infer_with_model()`
+  - [x] Model now returns human-readable labels ("golden retriever" not "unknown class")
+- [x] Create abstract preprocessing pipeline interface for different model types
+  - [x] Moved JPEG preprocessing from server main.rs into ImageModelConfig
+  - [x] ImageModelConfig now handles full pipeline: validate → preprocess → infer → format
+  - [x] Added proper error conversion from ValidationError to InferenceError
+- [x] Update server to pass raw bytes instead of preprocessed tensors
+  - [x] Server now forwards raw JPEG data to ModelConfig.infer()
+  - [x] Removed tensor module import from main.rs
+  - [x] All tests pass - system works end-to-end
+
+#### Afternoon: Text Infrastructure
 - [ ] Implement text preprocessing pipeline (tokenization)
 - [ ] Create `TextConfig` and text model loading
 - [ ] Add `/infer/text` endpoint alongside `/infer/image`
 - [ ] Ensure both model types can coexist
-
-#### Afternoon: Model Registry
-- [ ] Design JSON-based model registry format
-- [ ] Implement dynamic model loading system
-- [ ] Add model discovery and validation
-- [ ] Create model switching without restart
 
 **Tests Pass**: Both vision and text inference work independently
 
@@ -358,17 +368,27 @@ Create `models.json` configuration file:
 
 ### Implementation Steps Progress
 
-**CURRENT STATE**: 
+**CURRENT STATE** (Day 2 Afternoon): 
 - ModelConfig trait is fully integrated into server routing
-- Server uses `model_config.infer()` for all inference operations
-- All tests pass, linter is happy
-- System is ready for Day 2 tasks
+- WASM interface has been abstracted with model registry system
+- Preprocessing pipeline has been abstracted - models handle their own preprocessing
+- Server passes raw data to models, no longer does preprocessing
+- All tests pass, system is ready for text model implementation
 
-**NEXT STEPS (Day 2)**: 
-1. **PRIORITY**: Refactor WASM interface to be model-agnostic
-2. **THEN**: Create abstract preprocessing pipeline (moving JPEG preprocessing into ImageModelConfig)
-3. **THEN**: Implement actual text model support with proper preprocessing
-4. **OPTIONAL**: Create ModelRegistry to load from JSON config
+**COMPLETED TODAY**:
+1. ✅ Created `ModelRegistry` in WASM for managing multiple models
+2. ✅ Removed hardcoded ImageNet labels from main.rs
+3. ✅ Added complete `imagenet_labels.rs` module with all 1000 labels
+4. ✅ Implemented `register_model()` and `infer_with_model()` WASM exports
+5. ✅ Fixed "unknown class" issue - model now returns proper labels
+6. ✅ Moved preprocessing into ImageModelConfig - full pipeline in model
+7. ✅ Server now passes raw JPEG bytes instead of preprocessed tensors
+
+**NEXT STEPS (Day 2 Afternoon)**: 
+1. **NOW**: Implement text preprocessing pipeline (tokenization)
+2. **THEN**: Create real TextModelConfig implementation (replace mock)
+3. **THEN**: Add `/infer/text` endpoint for text models
+4. **THEN**: Test both model types work independently
 
 ### Testing Requirements
 
@@ -383,28 +403,32 @@ Current test status:
 ### Current System Status
 
 **Day 1 Complete** ✅: ModelConfig trait foundation is fully integrated and working!
+**Day 2 Morning Complete** ✅: WASM abstraction and preprocessing pipeline done!
 
 **COMPLETED FEATURES** ✅:
 - Response format returns proper JSON structure with output/metadata/model_info
 - ModelConfig trait system fully defined with all error types
-- ImageModelConfig wrapper implemented with configurable name/version
-- TextModelConfig placeholder returns mock responses
-- Server routing now uses ModelConfig trait for all inference
-- All redundant code removed, linter errors fixed
-- Integration tests pass, system works end-to-end
+- ImageModelConfig handles full inference pipeline: validate → preprocess → infer → format
+- TextModelConfig placeholder returns mock responses (ready for real implementation)
+- Server routing uses ModelConfig trait for all inference
+- Server passes raw data to models (no preprocessing in server)
+- WASM model registry system implemented with dynamic model management
+- ImageNet labels in dedicated module with proper label lookup
+- New WASM exports for model registration and inference
+- All tests pass, system fully functional
 
-**REMAINING LIMITATIONS** (to address in Day 2):
-- Preprocessing still hardcoded in server (`tensor::jpeg_to_raw_bgr()` call)
-- WASM interface is model-specific, needs abstraction
-- Text models only return mock responses
-- No model registry or dynamic loading yet
+**REMAINING TASKS** (Day 2 Afternoon):
+- Text models only return mock responses (need real implementation)
+- No text preprocessing pipeline (tokenization) yet
+- No `/infer/text` endpoint yet
+- Server-side JSON model registry not implemented (low priority for demo)
 
-**WHAT'S NEXT**: 
-Day 2 will focus on making the system truly multi-model by:
-1. Abstracting the WASM interface
-2. Moving preprocessing into model implementations
-3. Adding real text model support
-4. Creating model registry for dynamic configuration
+**WHAT'S HAPPENING NOW**: 
+Day 2 morning tasks complete. Ready to implement text model support:
+1. Implement text preprocessing pipeline (tokenization)
+2. Create real TextModelConfig with actual inference
+3. Add `/infer/text` endpoint
+4. Test both model types work independently
 
 ### Critical Implementation Notes
 
@@ -428,8 +452,12 @@ Day 2 will focus on making the system truly multi-model by:
 - [x] All error cases return proper HTTP status codes ✅
 
 **Day 2 Goals**:
-- [ ] Abstract WASM interface to be model-agnostic
-- [ ] Create abstract preprocessing pipeline (move JPEG processing into ImageModelConfig)
+- [x] Abstract WASM interface to be model-agnostic ✅
+  - [x] Model registry in WASM
+  - [x] Remove hardcoded labels
+  - [x] Dynamic model management
+- [x] Create abstract preprocessing pipeline (move JPEG processing into ImageModelConfig) ✅
+- [x] Update server to pass raw bytes instead of preprocessed tensors ✅
 - [ ] Implement real text model preprocessing and inference
-- [ ] Models load from JSON configuration
 - [ ] Add `/infer/text` endpoint for text models
+- [ ] Models load from JSON configuration (server-side) - deferred as low priority
