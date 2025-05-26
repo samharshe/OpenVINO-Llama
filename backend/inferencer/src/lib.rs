@@ -1,5 +1,7 @@
 use log::{error, warn, info};
 
+pub mod registry;
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct InferenceResult(pub usize, pub f32);
 
