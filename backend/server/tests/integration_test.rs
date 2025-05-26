@@ -23,26 +23,25 @@ async fn test_image_classification_preserves_functionality() {
         .send()
         .await;
     
-    // Should get a response (server might not be running in CI)
-    if let Ok(resp) = response {
-        assert_eq!(resp.status(), 200);
-        assert_eq!(resp.headers().get("content-type").unwrap(), "application/json");
-        
-        let json: Value = resp.json().await.expect("Response should be valid JSON");
-        
-        // Response should be object with output, metadata, and model_info
-        assert!(json.is_object());
-        let obj = json.as_object().unwrap();
-        
-        // Should have the three required top-level fields
-        assert!(obj.contains_key("output"));
-        assert!(obj.contains_key("metadata"));
-        assert!(obj.contains_key("model_info"));
-        
-        // Output should contain the actual inference result
-        let output = &obj["output"];
-        assert!(!output.is_null());
-    }
+    // Server must be running for tests to pass
+    let resp = response.expect("Failed to connect to server - is it running on port 3000?");
+    assert_eq!(resp.status(), 200);
+    assert_eq!(resp.headers().get("content-type").unwrap(), "application/json");
+    
+    let json: Value = resp.json().await.expect("Response should be valid JSON");
+    
+    // Response should be object with output, metadata, and model_info
+    assert!(json.is_object());
+    let obj = json.as_object().unwrap();
+    
+    // Should have the three required top-level fields
+    assert!(obj.contains_key("output"));
+    assert!(obj.contains_key("metadata"));
+    assert!(obj.contains_key("model_info"));
+    
+    // Output should contain the actual inference result
+    let output = &obj["output"];
+    assert!(!output.is_null());
 }
 
 #[tokio::test]
@@ -54,12 +53,11 @@ async fn test_server_cors_headers() {
         .send()
         .await;
     
-    if let Ok(resp) = response {
-        assert_eq!(resp.status(), 200);
-        assert_eq!(resp.headers().get("access-control-allow-origin").unwrap(), "*");
-        assert!(resp.headers().get("access-control-allow-methods").is_some());
-        assert!(resp.headers().get("access-control-allow-headers").is_some());
-    }
+    let resp = response.expect("Failed to connect to server - is it running on port 3000?");
+    assert_eq!(resp.status(), 200);
+    assert_eq!(resp.headers().get("access-control-allow-origin").unwrap(), "*");
+    assert!(resp.headers().get("access-control-allow-methods").is_some());
+    assert!(resp.headers().get("access-control-allow-headers").is_some());
 }
 
 #[tokio::test]
@@ -73,9 +71,8 @@ async fn test_unsupported_content_type() {
         .send()
         .await;
     
-    if let Ok(resp) = response {
-        assert_eq!(resp.status(), 415); // Unsupported Media Type
-    }
+    let resp = response.expect("Failed to connect to server - is it running on port 3000?");
+    assert_eq!(resp.status(), 415); // Unsupported Media Type
 }
 
 #[tokio::test]
@@ -88,9 +85,8 @@ async fn test_missing_content_type() {
         .send()
         .await;
     
-    if let Ok(resp) = response {
-        assert_eq!(resp.status(), 400); // Bad Request
-    }
+    let resp = response.expect("Failed to connect to server - is it running on port 3000?");
+    assert_eq!(resp.status(), 400); // Bad Request
 }
 
 #[tokio::test]
@@ -102,8 +98,7 @@ async fn test_logs_endpoint() {
         .send()
         .await;
     
-    if let Ok(resp) = response {
-        assert_eq!(resp.status(), 200);
-        assert_eq!(resp.headers().get("content-type").unwrap(), "text/event-stream");
-    }
+    let resp = response.expect("Failed to connect to server - is it running on port 3000?");
+    assert_eq!(resp.status(), 200);
+    assert_eq!(resp.headers().get("content-type").unwrap(), "text/event-stream");
 }
