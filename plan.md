@@ -92,11 +92,20 @@ Transform existing v0.1 image classification prototype into a clean, flexible un
   - [x] Removed tensor module import from main.rs
   - [x] All tests pass - system works end-to-end
 
-#### Afternoon: Text Infrastructure
-- [ ] Implement text preprocessing pipeline (tokenization)
-- [ ] Create `TextConfig` and text model loading
-- [ ] Add `/infer/text` endpoint alongside `/infer/image`
-- [ ] Ensure both model types can coexist
+#### Afternoon: Text Infrastructure ⚠️ NEXT TASK
+**CRITICAL STATUS UPDATE**: Research phase completed. Ready for implementation.
+
+**IMMEDIATE NEXT STEPS**:
+1. **[NOW]** Make WASM interface accept multiple named tensors (see Section: "Text Model WASM Requirements" below)
+2. **[THEN]** Implement text preprocessing in TextModelConfig (see Section: "Text Preprocessing Implementation" below)
+3. **[THEN]** Add `/infer/text` endpoint with proper Content-Type detection
+4. **[THEN]** Test both model types work independently
+
+**RESEARCH FINDINGS**: 
+- Text models require multiple input tensors (input_ids, attention_mask, token_type_ids)
+- Rust tokenizers crate is compatible if using exact same tokenizer files
+- OpenVINO expects int32/int64 tensor arrays for token IDs
+- Current WASM interface only supports single tensor input (BLOCKING ISSUE)
 
 **Tests Pass**: Both vision and text inference work independently
 
@@ -458,6 +467,423 @@ Day 2 morning tasks complete. Ready to implement text model support:
   - [x] Dynamic model management
 - [x] Create abstract preprocessing pipeline (move JPEG processing into ImageModelConfig) ✅
 - [x] Update server to pass raw bytes instead of preprocessed tensors ✅
+- [ ] **[CRITICAL]** Make WASM accept multiple input tensors (BLOCKING)
 - [ ] Implement real text model preprocessing and inference
 - [ ] Add `/infer/text` endpoint for text models
 - [ ] Models load from JSON configuration (server-side) - deferred as low priority
+
+---
+
+# DETAILED IMPLEMENTATION GUIDE FOR NEXT DEVELOPER
+
+## CRITICAL CONTEXT: WHERE WE ARE
+
+### Current State Summary
+**Date**: Day 2 Afternoon
+**Status**: Morning tasks complete, afternoon ready to start
+**What works**: Image classification fully functional with new architecture
+**What's next**: Text model support implementation
+
+### Architecture Overview
+The system has two layers:
+1. **Server layer** (Rust): HTTP server, routing, ModelConfig trait implementations
+2. **WASM layer** (Rust→WASM): OpenVINO inference engine, model registry
+
+**Current flow**: HTTP request → Server detects type → ModelConfig.infer() → WASM inference → JSON response
+
+### What Just Got Fixed
+1. **Preprocessing abstraction**: Server no longer does preprocessing, ModelConfig implementations handle their own
+2. **WASM registry**: WASM can now manage multiple models with metadata
+3. **Clean architecture**: Server passes raw data, models handle validation/preprocessing/inference
+
+## IMMEDIATE BLOCKING ISSUE: WASM INTERFACE LIMITATION
+
+### The Problem
+Current WASM interface only accepts **single tensor input**:
+```rust
+// In inferencer/src/main.rs - CURRENT LIMITATION
+#[no_mangle]
+pub extern "C" fn infer_with_model(
+    data_ptr: i32, 
+    data_len: i32, 
+    result_ptr: i32, 
+    model_id: i32
+) -> i32
+```
+
+**BUT**: Text models need **multiple named tensors**:
+- `input_ids`: [1, sequence_length] int32
+- `attention_mask`: [1, sequence_length] int32  
+- `token_type_ids`: [1, sequence_length] int32 (optional)
+
+### Required WASM Changes
+**File**: `backend/inferencer/src/main.rs`
+
+**STEP 1**: Create multi-tensor input structure
+```rust
+#[derive(Serialize, Deserialize)]
+pub struct MultiTensorInput {
+    pub tensors: HashMap<String, TensorData>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct TensorData {
+    pub shape: Vec<usize>,
+    pub data_type: String, // "int32", "float32", etc.
+    pub data: Vec<u8>,
+}
+```
+
+**STEP 2**: Replace single-tensor inference with multi-tensor
+```rust
+#[no_mangle]
+pub extern "C" fn infer_multi_tensor(
+    input_json_ptr: i32,
+    input_json_len: i32, 
+    result_ptr: i32,
+    model_id: i32
+) -> i32 {
+    // Deserialize MultiTensorInput from JSON
+    // Set multiple input tensors on OpenVINO model
+    // Run inference
+    // Return JSON result
+}
+```
+
+**STEP 3**: Update server to call new WASM function
+**File**: `backend/server/src/runtime.rs`
+- Change `WasmInstance::infer()` to accept `MultiTensorInput`
+- Serialize to JSON, pass to WASM
+- Keep backward compatibility for image models
+
+## TEXT PREPROCESSING IMPLEMENTATION
+
+### Required Dependencies
+**File**: `backend/server/Cargo.toml`
+```toml
+[dependencies]
+tokenizers = "0.15"  # HuggingFace tokenizers for Rust
+```
+
+### TextModelConfig Implementation
+**File**: `backend/server/src/model_config.rs`
+
+**CRITICAL DECISIONS MADE**:
+1. **Use Rust tokenizers crate** (not OpenVINO tokenizers) for simplicity
+2. **Start with BERT-style models** (classification, not generation)
+3. **Fixed sequence length** of 512 tokens for demo
+4. **Mock model initially** - focus on getting pipeline working
+
+**Implementation template**:
+```rust
+pub struct TextModelConfig {
+    engine: Arc<Engine>,
+    module: Arc<Module>,
+    log_sender: broadcast::Sender<String>,
+    tokenizer: Tokenizer,  // From tokenizers crate
+    max_length: usize,
+    name: String,
+    version: String,
+}
+
+impl TextModelConfig {
+    pub fn new(
+        engine: Arc<Engine>,
+        module: Arc<Module>, 
+        log_sender: broadcast::Sender<String>,
+        tokenizer_path: &str,  // Path to tokenizer.json
+        max_length: usize,
+        name: String,
+        version: String,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let tokenizer = Tokenizer::from_file(tokenizer_path)?;
+        Ok(Self {
+            engine, module, log_sender, tokenizer, max_length, name, version
+        })
+    }
+}
+
+impl ModelConfig for TextModelConfig {
+    fn validate_input(&self, data: &[u8]) -> Result<(), ValidationError> {
+        // Validate UTF-8 text
+        std::str::from_utf8(data)
+            .map_err(|_| ValidationError::InvalidFormat)?;
+        
+        // Check length limits
+        if data.len() > 10240 {  // 10KB max for demo
+            return Err(ValidationError::InvalidSize);
+        }
+        
+        Ok(())
+    }
+
+    fn infer(&self, data: &[u8]) -> Result<serde_json::Value, InferenceError> {
+        // 1. Validate input
+        self.validate_input(data)?;
+        
+        // 2. Convert to text
+        let text = std::str::from_utf8(data)
+            .map_err(|e| InferenceError::PreprocessingFailed(e.to_string()))?;
+        
+        // 3. Tokenize to multiple tensors
+        let encoding = self.tokenizer.encode(text, true)
+            .map_err(|e| InferenceError::PreprocessingFailed(e.to_string()))?;
+        
+        // 4. Create multi-tensor input
+        let multi_tensor = self.create_multi_tensor_input(&encoding)?;
+        
+        // 5. Create WASM instance and run inference  
+        let mut wasm_instance = WasmInstance::new(self.engine.clone(), self.module.clone())
+            .map_err(|e| InferenceError::ModelLoadFailed(e.to_string()))?;
+        
+        // 6. Call new multi-tensor inference
+        let result = wasm_instance.infer_multi_tensor(multi_tensor)
+            .map_err(|e| InferenceError::InferenceFailed(e.to_string()))?;
+        
+        Ok(result)
+    }
+    
+    fn model_info(&self) -> ModelInfo {
+        ModelInfo {
+            name: self.name.clone(),
+            version: self.version.clone(),
+            model_type: ModelType::Text,
+        }
+    }
+}
+
+impl TextModelConfig {
+    fn create_multi_tensor_input(&self, encoding: &Encoding) -> Result<MultiTensorInput, InferenceError> {
+        let input_ids = encoding.get_ids().to_vec();
+        let attention_mask = encoding.get_attention_mask().to_vec();
+        
+        // Pad to max_length
+        let mut padded_ids = input_ids.clone();
+        let mut padded_mask = attention_mask.clone();
+        
+        padded_ids.resize(self.max_length, 0);  // PAD token = 0
+        padded_mask.resize(self.max_length, 0);
+        
+        let mut tensors = HashMap::new();
+        
+        // input_ids tensor
+        tensors.insert("input_ids".to_string(), TensorData {
+            shape: vec![1, self.max_length],
+            data_type: "int32".to_string(),
+            data: bytemuck::cast_slice(&padded_ids).to_vec(),
+        });
+        
+        // attention_mask tensor  
+        tensors.insert("attention_mask".to_string(), TensorData {
+            shape: vec![1, self.max_length],
+            data_type: "int32".to_string(),
+            data: bytemuck::cast_slice(&padded_mask).to_vec(),
+        });
+        
+        Ok(MultiTensorInput { tensors })
+    }
+}
+```
+
+### Server Routing Updates
+**File**: `backend/server/src/main.rs`
+
+**Update infer function**:
+```rust
+async fn infer(
+    request: Request<Body>,
+    inference_thread_sender: UnboundedSender<InferenceRequest>,
+    log_sender: tokio::sync::broadcast::Sender<String>,
+) -> Result<Response<BoxBody>> {
+    if let Some(content_type) = request.headers().get(header::CONTENT_TYPE) {
+        let content_type_str = content_type.to_str().unwrap_or("");
+        
+        // Route based on content type
+        match content_type_str {
+            "image/jpeg" => {
+                // Existing image logic - no changes needed
+            },
+            "text/plain" => {
+                // NEW: Text processing logic
+                let mut body = request.collect().await?.aggregate();
+                let bytes = body.copy_to_bytes(body.remaining());
+                
+                log_sender.send("[server/main.rs] Processing text for inference.".to_string()).ok();
+                let (sender, receiver) = oneshot::channel();
+                inference_thread_sender.send(InferenceRequest {
+                    data: bytes.to_vec(),
+                    model_type: ModelType::Text,  // NEW: Add model_type to InferenceRequest
+                    responder: sender,
+                })?;
+                
+                // Wait for response (same as image)
+            },
+            _ => {
+                // Unsupported media type error
+            }
+        }
+    }
+}
+```
+
+**Update InferenceRequest structure**:
+**File**: `backend/server/src/utils.rs`
+```rust
+#[derive(Debug)]
+pub struct InferenceRequest {
+    pub data: Vec<u8>,
+    pub model_type: ModelType,  // NEW: Route to correct model
+    pub responder: oneshot::Sender<Value>,
+}
+```
+
+**Update inference thread**:
+**File**: `backend/server/src/main.rs` (in main function)
+```rust
+// Create both model configs
+let image_model = Arc::new(ImageModelConfig::new(/*...*/));
+let text_model = Arc::new(TextModelConfig::new(/*...*/));
+
+while let Some(request) = rx.recv().await {
+    let image_model = Arc::clone(&image_model);
+    let text_model = Arc::clone(&text_model);
+    
+    spawn_blocking(move || -> anyhow::Result<()> {
+        let result = match request.model_type {
+            ModelType::Image => image_model.infer(&request.data),
+            ModelType::Text => text_model.infer(&request.data),
+            _ => Err(InferenceError::PreprocessingFailed("Unsupported model type".to_string())),
+        };
+        
+        let response = result.expect("Inference failed");
+        request.responder.send(response).unwrap();
+        Ok(())
+    });
+}
+```
+
+## TESTING STRATEGY
+
+### Required Test Files
+**Create**: `backend/server/tests/text_test_input.txt`
+```
+This is a test sentence for text classification.
+```
+
+### Test Implementation
+**File**: `backend/server/tests/integration_test.rs`
+```rust
+#[tokio::test]
+async fn test_text_classification_preserves_functionality() {
+    let client = reqwest::Client::new();
+    
+    let test_text = "This is a test sentence.";
+    
+    let response = client
+        .post("http://127.0.0.1:3000/infer")
+        .header("Content-Type", "text/plain")
+        .body(test_text)
+        .send()
+        .await
+        .expect("Failed to send request");
+    
+    assert_eq!(response.status(), 200);
+    
+    let json: serde_json::Value = response.json().await.expect("Failed to parse JSON");
+    
+    // Validate required JSON structure
+    assert!(json.get("output").is_some());
+    assert!(json.get("metadata").is_some()); 
+    assert!(json.get("model_info").is_some());
+    
+    let model_info = json.get("model_info").unwrap();
+    assert_eq!(model_info.get("model_type").unwrap(), "Text");
+}
+```
+
+## CRITICAL FILES TO MODIFY
+
+**PRIORITY 1** (Required for basic functionality):
+1. `backend/inferencer/src/main.rs` - Add multi-tensor WASM interface
+2. `backend/server/src/model_config.rs` - Implement TextModelConfig
+3. `backend/server/src/runtime.rs` - Update WasmInstance for multi-tensor
+4. `backend/server/src/utils.rs` - Add model_type to InferenceRequest
+5. `backend/server/src/main.rs` - Update routing and inference thread
+
+**PRIORITY 2** (For proper testing):
+6. `backend/server/tests/integration_test.rs` - Add text model tests
+7. `backend/server/Cargo.toml` - Add tokenizers dependency
+
+## TOKENIZER FILES NEEDED
+
+For testing, download a simple BERT tokenizer:
+```bash
+# In backend/server/fixture/ directory
+wget https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json
+```
+
+Or use mock tokenizer for initial implementation (recommended).
+
+## POTENTIAL GOTCHAS & DEBUGGING
+
+### 1. **WASM Compilation Issues**
+- WASM target must support serde JSON serialization
+- May need to add features to Cargo.toml: `serde = { version = "1.0", features = ["derive"] }`
+
+### 2. **Tokenizer Compatibility**
+- Must use exact same tokenizer as original model training
+- Test with known inputs first: "Hello world" should tokenize to predictable IDs
+
+### 3. **Memory Management**
+- Text tensors are larger than image tensors (sequence_length * vocab_size)
+- Watch for memory leaks across FFI boundary
+
+### 4. **Error Handling**
+- Tokenization can fail on malformed text
+- WASM serialization/deserialization can fail
+- Add detailed error logging for debugging
+
+## SUCCESS CRITERIA
+
+**Minimum viable implementation**:
+1. ✅ WASM accepts multi-tensor input (even if text model is mocked)
+2. ✅ Server routes text/plain to TextModelConfig
+3. ✅ TextModelConfig tokenizes input and calls WASM
+4. ✅ System returns JSON with correct structure
+5. ✅ All existing image tests still pass
+6. ✅ New text test passes
+
+**Ready for Day 3**:
+- Both image and text inference work independently
+- Clean error handling for both model types
+- Frontend can call both endpoints
+- System is ready for UI integration
+
+## IMPLEMENTATION ORDER
+
+**DO NOT DEVIATE FROM THIS ORDER** (learned from previous refactoring):
+
+1. **First**: Make WASM multi-tensor interface work with mock text model
+2. **Second**: Implement TextModelConfig with mock inference 
+3. **Third**: Add server routing for text/plain
+4. **Fourth**: Test end-to-end with mock data
+5. **Fifth**: Add real tokenization and test again
+6. **Last**: Add real OpenVINO text model (if time permits)
+
+**Rationale**: Get the architecture working first with mocks, then add complexity incrementally while keeping tests green.
+
+## DOCUMENTATION REFERENCES
+
+All required documentation is in `/docs/` directory:
+- **OpenVINO Tokenizers**: How tokenization works with OpenVINO
+- **BERT Demo**: Exact tensor format requirements
+- **openvino-rs**: Rust integration patterns
+- **GenAI Framework**: Text generation APIs (for future)
+
+**Key insight from research**: Rust tokenizers crate IS compatible with OpenVINO if using same tokenizer files. Start with this approach for simplicity.
+
+---
+
+# END OF IMPLEMENTATION GUIDE
+
+**FINAL NOTE**: The architecture is solid. The preprocessing pipeline is clean. The WASM interface needs to support multiple tensors, then text models are straightforward. Do not overthink it. Follow the plan exactly and the demo will work perfectly.
