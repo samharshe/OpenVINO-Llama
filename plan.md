@@ -92,28 +92,44 @@ Transform existing v0.1 image classification prototype into a clean, flexible un
   - [x] Removed tensor module import from main.rs
   - [x] All tests pass - system works end-to-end
 
-#### Afternoon: Preprocessing Architecture Refactor ⚠️ CRITICAL CHANGE
+#### Afternoon: Preprocessing Architecture Refactor ✅ COMPLETED
 **MAJOR ARCHITECTURE DECISION**: Moving ALL preprocessing to WASM layer for cleaner design.
 
 **Why This Refactor**:
-- **Current state**: ImageModelConfig does preprocessing (JPEG→tensor) in server layer
-- **Issue**: Server layer has model-specific logic, violating single responsibility
-- **Solution**: Move ALL preprocessing (image AND text) to WASM layer
-- **Benefit**: Server becomes pure router, models are fully self-contained
+- **Initial state**: ImageModelConfig did preprocessing (JPEG→tensor) in server layer
+- **Issue**: Server layer had model-specific logic, violating single responsibility
+- **Solution**: Moved ALL preprocessing (image AND text) to WASM layer
+- **Benefit**: Server is now a pure router, models are fully self-contained
 
-**REFACTORING PLAN**:
-1. **[FIRST]** Migrate image preprocessing from server to WASM
-2. **[THEN]** Implement text preprocessing in WASM (following same pattern)
-3. **[THEN]** Server only routes raw bytes based on Content-Type
-4. **[THEN]** Test both model types work with new architecture
+**COMPLETED REFACTORING**:
+1. ✅ **Phase 1**: Added JPEG processing to inferencer
+   - Added `image` crate dependency
+   - Created `preprocessing.rs` module with `jpeg_to_raw_bgr()` function
+   - Added `infer_from_jpeg()` method to MobilnetModel
+2. ✅ **Phase 2**: Updated WASM interface for dual input support
+   - Registry auto-detects JPEG vs tensor input via magic bytes
+   - Routes to appropriate processing path transparently
+3. ✅ **Phase 3**: Simplified server layer
+   - ImageModelConfig now passes raw JPEG directly to WASM
+   - Removed all preprocessing logic from server
+   - Server is now a pure router
+4. ⏳ **Phase 4**: Text support following same pattern (NEXT STEP)
+
+**CRITICAL BUG FIX**:
+- **Issue**: All images were being classified as "spotlight" (class 818)
+- **Root cause**: Preprocessing normalization mismatch
+- **Solution**: 
+  - Removed normalization (kept pixel values in 0-255 range)
+  - Changed resize filter from Triangle to Lanczos3
+  - Now matches original OpenCV preprocessing exactly
 
 **KEY INSIGHTS**: 
-- Models should be self-contained (raw input → processed output)
-- Server should only route, not process
-- WASM can handle both JPEG decoding and tokenization
-- More elegant and maintainable architecture
+- Models are now self-contained (raw input → processed output)
+- Server is a pure router with no model-specific logic
+- WASM handles both JPEG decoding and will handle tokenization
+- Clean, maintainable architecture achieved
 
-**Tests Pass**: Both vision and text inference work independently
+**Tests Pass**: Image classification works perfectly with new architecture
 
 ### Day 3: Frontend Integration & Polish
 **Goal**: Complete demo with working frontend
@@ -383,27 +399,31 @@ Create `models.json` configuration file:
 
 ### Implementation Steps Progress
 
-**CURRENT STATE** (Day 2 Afternoon): 
+**CURRENT STATE** (Day 2 Afternoon - COMPLETED): 
 - ModelConfig trait is fully integrated into server routing
 - WASM interface has been abstracted with model registry system
-- Preprocessing pipeline has been abstracted - models handle their own preprocessing
-- Server passes raw data to models, no longer does preprocessing
+- ALL preprocessing now happens in WASM layer (architecture goal achieved!)
+- Server is a pure router - passes raw data to WASM with no preprocessing
 - All tests pass, system is ready for text model implementation
 
-**COMPLETED TODAY**:
+**COMPLETED ON DAY 2**:
 1. ✅ Created `ModelRegistry` in WASM for managing multiple models
 2. ✅ Removed hardcoded ImageNet labels from main.rs
 3. ✅ Added complete `imagenet_labels.rs` module with all 1000 labels
 4. ✅ Implemented `register_model()` and `infer_with_model()` WASM exports
 5. ✅ Fixed "unknown class" issue - model now returns proper labels
-6. ✅ Moved preprocessing into ImageModelConfig - full pipeline in model
-7. ✅ Server now passes raw JPEG bytes instead of preprocessed tensors
+6. ✅ Migrated ALL image preprocessing from server to WASM:
+   - Added `preprocessing.rs` module in inferencer
+   - WASM now handles JPEG decoding and tensor conversion
+   - Server passes raw JPEG bytes directly to WASM
+7. ✅ Fixed preprocessing bug (normalization and filter issues)
+8. ✅ Server is now a pure router with no model-specific logic
 
-**NEXT STEPS (Day 2 Afternoon - UPDATED)**: 
-1. **NOW**: Migrate image preprocessing from server to WASM
-2. **THEN**: Implement text model in WASM with tokenization
-3. **THEN**: Update server to pass raw bytes for both model types
-4. **THEN**: Test both model types work with new architecture
+**NEXT STEPS (Day 2 Evening/Day 3 Morning)**: 
+1. **NOW**: Implement text model in WASM with tokenization
+2. **THEN**: Register text model in model registry
+3. **THEN**: Test both model types work with new architecture
+4. **THEN**: Begin frontend integration
 
 ### Testing Requirements
 
@@ -466,17 +486,27 @@ Day 2 morning tasks complete. Architecture refactor in progress:
 - [x] Server routes based on Content-Type detection ✅
 - [x] All error cases return proper HTTP status codes ✅
 
-**Day 2 Goals**:
+**Day 2 Goals** ✅ **ALL COMPLETED**:
 - [x] Abstract WASM interface to be model-agnostic ✅
   - [x] Model registry in WASM
   - [x] Remove hardcoded labels
   - [x] Dynamic model management
-- [x] Create abstract preprocessing pipeline (move JPEG processing into ImageModelConfig) ✅
+- [x] Migrate ALL preprocessing from server to WASM ✅
+  - [x] Added image crate and preprocessing module to inferencer
+  - [x] WASM handles JPEG decoding and tensor conversion
+  - [x] Server passes raw bytes (no preprocessing)
+  - [x] Fixed preprocessing bug (normalization/filter issues)
 - [x] Update server to pass raw bytes instead of preprocessed tensors ✅
-- [x] ~~Make WASM accept multiple input tensors~~ NOT NEEDED - Option B chosen ✅
-- [ ] Implement real text model preprocessing and inference
-- [ ] Server routing already supports text/plain ✅
-- [ ] Models load from JSON configuration (server-side) - deferred as low priority
+- [x] Server is now a pure router ✅
+- [x] All tests pass with new architecture ✅
+
+**Day 3 Goals** (NEXT):
+- [ ] Implement text model in WASM with tokenization
+- [ ] Add tokenizers crate dependency
+- [ ] Create text preprocessing module
+- [ ] Register text model in registry
+- [ ] Add text inference integration test
+- [ ] Begin frontend integration
 
 ---
 
@@ -485,10 +515,13 @@ Day 2 morning tasks complete. Architecture refactor in progress:
 ## CRITICAL CONTEXT: WHERE WE ARE
 
 ### Current State Summary
-**Date**: Day 2 Afternoon
-**Status**: Morning tasks complete, afternoon ready to start
-**What works**: Image classification fully functional with new architecture
-**What's next**: Text model support implementation
+**Date**: Day 2 Evening (Preprocessing Migration COMPLETE)
+**Status**: ALL Day 2 tasks complete, ready for text model implementation
+**What works**: 
+- Image classification fully functional with preprocessing in WASM
+- Server is now a pure router (no preprocessing logic)
+- WASM handles all model-specific processing
+**What's next**: Text model support implementation following same pattern
 
 ### Architecture Overview
 The system has two layers:
@@ -497,49 +530,64 @@ The system has two layers:
 
 **Current flow**: HTTP request → Server detects type → ModelConfig.infer() → WASM inference → JSON response
 
-### What Just Got Fixed
-1. **Preprocessing abstraction**: ModelConfig implementations handle their own preprocessing (BUT still in server layer)
-2. **WASM registry**: WASM can now manage multiple models with metadata
-3. **Partially clean architecture**: Server passes raw data to ModelConfig, but preprocessing still happens in server
+### What We Accomplished in Day 2
+1. ✅ **WASM registry**: WASM can now manage multiple models with metadata
+2. ✅ **Preprocessing migration**: ALL preprocessing moved from server to WASM layer
+3. ✅ **Clean architecture achieved**: Server is now a pure router
+4. ✅ **Bug fixes**: Fixed image preprocessing (normalization and filter issues)
+5. ✅ **Dual input support**: WASM accepts both raw JPEG and preprocessed tensors
 
-### What We're Fixing Now
-**Problem**: Preprocessing is still in the server layer (ImageModelConfig does JPEG→tensor conversion)
-**Solution**: Move ALL preprocessing to WASM layer for truly clean architecture
+### Key Architecture Achievement
+**Before**: Server did preprocessing (JPEG→tensor), then passed to WASM
+**After**: Server passes raw JPEG to WASM, which handles all preprocessing
+**Result**: Models are fully self-contained, server has no model-specific logic
 
-## PREPROCESSING REFACTOR: MOVING TO WASM LAYER
+## PREPROCESSING MIGRATION: ✅ COMPLETED
 
-### Current Architecture (Suboptimal)
-- **Server**: Raw data → Preprocessing (JPEG→tensor, text→tokens) → WASM
-- **WASM**: Preprocessed data → Inference → Results
-- **Problem**: Server has model-specific preprocessing logic
+### Architecture Before Migration
+- **Server**: Raw data → Preprocessing (JPEG→tensor) → WASM
+- **WASM**: Preprocessed tensor → Inference → Results
+- **Problem**: Server had model-specific preprocessing logic
 
-### Target Architecture (Clean)
-- **Server**: Raw data → WASM (pure routing)
+### Architecture After Migration (CURRENT STATE)
+- **Server**: Raw data → WASM (pure routing, no preprocessing)
 - **WASM**: Raw data → Preprocessing → Inference → Results
-- **Benefit**: Models are fully self-contained
+- **Achievement**: Models are fully self-contained
 
-### Image Preprocessing Migration Plan
+### How We Migrated (Maintained Working System Throughout)
 
-#### Phase 1: Add JPEG Processing to Inferencer ✅ Maintains Working System
-1. Add `image` crate dependency to inferencer Cargo.toml
-2. Create preprocessing module in inferencer
-3. Update MobilnetModel to accept raw JPEG (keep tensor path for compatibility)
-4. **System still works**: Server continues current flow
+#### Phase 1: Added JPEG Processing to Inferencer ✅ COMPLETED
+1. Added `image = { version = "0.24", default-features = false, features = ["jpeg"] }` to inferencer/Cargo.toml
+2. Created `preprocessing.rs` module with `jpeg_to_raw_bgr()` function
+3. Added `infer_from_jpeg()` method to MobilnetModel
+4. **Result**: WASM could accept both raw JPEG and tensor inputs
 
-#### Phase 2: Update WASM Interface ✅ Maintains Working System
-1. Modify `infer_with_model` to detect input type (JPEG vs tensor)
-2. Route to appropriate processing based on magic bytes
-3. **System still works**: Dual support for both paths
+#### Phase 2: Updated WASM Interface ✅ COMPLETED
+1. Modified registry to auto-detect input type (JPEG vs tensor) via magic bytes
+2. Routes to `infer_from_jpeg()` for JPEG, existing path for tensors
+3. **Result**: Transparent dual support without breaking changes
 
-#### Phase 3: Simplify Server Layer ✅ Maintains Working System
-1. Update ImageModelConfig to pass raw JPEG to WASM
-2. Remove preprocessing from server
-3. **System still works**: Now using cleaner architecture
+#### Phase 3: Simplified Server Layer ✅ COMPLETED
+1. Updated ImageModelConfig to pass raw JPEG bytes directly to WASM
+2. Removed all preprocessing logic from server
+3. Removed tensor module import from main.rs
+4. **Result**: Server is now a pure router
 
-#### Phase 4: Add Text Support Following Same Pattern
-1. Text model in WASM handles raw text input
-2. Tokenization happens inside WASM
-3. Server just routes based on Content-Type
+#### Critical Bug Fix During Migration
+**Problem**: All images classified as "spotlight" after migration
+**Root Cause**: Preprocessing didn't match original OpenCV implementation
+**Solution**:
+```rust
+// In preprocessing.rs - removed normalization, changed filter
+let resized = DynamicImage::ImageRgb8(img).resize_exact(224, 224, FilterType::Lanczos3);
+// Convert to float WITHOUT normalization (keep 0-255 range)
+nchw_data[idx] = b as f32;  // Blue channel (no division by 255)
+```
+
+### Next: Phase 4 - Add Text Support Following Same Pattern
+1. Text model in WASM will handle raw UTF-8 text input
+2. Tokenization will happen inside WASM (using tokenizers crate)
+3. Server already routes text/plain to correct model
 
 ### WASM Text Model Implementation
 **File**: `backend/inferencer/src/lib.rs` (new text model)
@@ -695,19 +743,64 @@ async fn test_text_classification_preserves_functionality() {
 }
 ```
 
-## CRITICAL FILES TO MODIFY
+## CURRENT CODEBASE STATE (AFTER PREPROCESSING MIGRATION)
 
-**PRIORITY 1** (Image preprocessing migration):
-1. `backend/inferencer/Cargo.toml` - Add image crate dependency
-2. `backend/inferencer/src/lib.rs` - Add preprocessing module and update MobilnetModel
-3. `backend/inferencer/src/main.rs` - Update to detect raw JPEG vs tensor
-4. `backend/server/src/model_config.rs` - Simplify ImageModelConfig to pass raw JPEG
+### Files Created/Modified During Migration
 
-**PRIORITY 2** (Text model addition):
-5. `backend/inferencer/src/lib.rs` - Add text model with tokenization
-6. `backend/server/src/utils.rs` - Add model_type to InferenceRequest
-7. `backend/server/src/main.rs` - Update routing for model types
-8. `backend/inferencer/src/registry.rs` - Register text model type
+**Created Files**:
+1. `backend/inferencer/src/preprocessing.rs` - JPEG preprocessing module
+   - `jpeg_to_raw_bgr()`: Converts JPEG to BGR tensor (0-255 range, NCHW format)
+   - `is_jpeg()`: Detects JPEG magic bytes
+   - `is_tensor()`: Validates tensor format
+   - Uses Lanczos3 filter, no normalization
+
+**Modified Files**:
+1. `backend/inferencer/Cargo.toml` - Added image crate dependency
+2. `backend/inferencer/src/lib.rs` - Added preprocessing module, `infer_from_jpeg()` method
+3. `backend/inferencer/src/registry.rs` - Auto-detects JPEG vs tensor input
+4. `backend/server/src/model_config.rs` - Simplified to pass raw JPEG to WASM
+5. `backend/server/src/main.rs` - Removed tensor module import
+
+### Key Code Snippets for Reference
+
+**WASM Registry Input Detection** (`backend/inferencer/src/registry.rs`):
+```rust
+let result = if crate::preprocessing::is_jpeg(data) {
+    info!("Detected JPEG input, preprocessing image");
+    model.infer_from_jpeg(data)?
+} else if crate::preprocessing::is_tensor(data) {
+    info!("Detected tensor input, using preprocessed data");
+    let tensor = model.tensor_from_raw_data(data)
+        .map_err(|e| format!("Invalid tensor data: {:?}", e))?;
+    model.run_inference(tensor)?
+}
+```
+
+**Server ModelConfig** (`backend/server/src/model_config.rs`):
+```rust
+fn infer(&self, data: &[u8]) -> Result<serde_json::Value, InferenceError> {
+    self.validate_input(data)?;
+    // Pass raw JPEG directly to WASM (no preprocessing here!)
+    let mut wasm_instance = WasmInstance::new(self.engine.clone(), self.module.clone())
+        .map_err(|e| InferenceError::ModelLoadFailed(e.to_string()))?;
+    let result = wasm_instance.infer(data.to_vec())
+        .map_err(|e| InferenceError::InferenceFailed(e.to_string()))?;
+    Ok(result)
+}
+```
+
+## FILES TO CREATE/MODIFY FOR TEXT MODEL
+
+**PRIORITY 1** (Text model in WASM):
+1. `backend/inferencer/Cargo.toml` - Add tokenizers crate dependency
+2. `backend/inferencer/src/text_preprocessing.rs` - NEW: Tokenization module
+3. `backend/inferencer/src/lib.rs` - Add TextModel struct and implementation
+4. `backend/inferencer/src/registry.rs` - Register text model type
+
+**PRIORITY 2** (Server routing updates):
+5. `backend/server/src/utils.rs` - Add model_type to InferenceRequest
+6. `backend/server/src/main.rs` - Update routing to support model types
+7. `backend/server/tests/integration_test.rs` - Add text inference test
 
 ## TOKENIZER FILES NEEDED
 
@@ -787,3 +880,39 @@ All required documentation is in `/docs/` directory:
 # END OF IMPLEMENTATION GUIDE
 
 **FINAL NOTE**: The architecture is solid. The preprocessing pipeline is clean. No WASM interface changes needed with Option B. Text models construct their own tensors internally. Follow the updated plan and the demo will work perfectly.
+
+---
+
+## PROJECT HANDOFF SUMMARY
+
+### What's Working (End of Day 2)
+1. **Complete image inference pipeline**: JPEG → WASM preprocessing → inference → JSON response
+2. **Clean architecture**: Server is a pure router with no model-specific logic
+3. **Flexible model system**: Registry supports multiple models, easy to add new ones
+4. **All tests passing**: System maintains functionality throughout refactoring
+
+### Key Architecture Decisions Made
+1. **All preprocessing in WASM**: Models are self-contained units
+2. **Dual input support**: WASM transparently handles both raw and preprocessed data
+3. **No WASM interface changes**: Used "Option B" - models construct tensors internally
+4. **Pure routing server**: Server only detects content type and routes to appropriate model
+
+### Critical Implementation Details
+1. **Preprocessing must match exactly**: No normalization, Lanczos3 filter, BGR channel order
+2. **WASM compilation target**: Use `wasm32-wasip1` (not wasm32-wasi)
+3. **Model registry**: Each model type self-registers with metadata
+4. **Error handling**: Comprehensive error types with proper conversions
+
+### Next Engineer Action Items
+1. **Start with text model**: Add tokenizers crate to inferencer/Cargo.toml
+2. **Follow established pattern**: Raw input → WASM → preprocessing → inference → JSON
+3. **Test continuously**: Keep all existing tests green while adding new functionality
+4. **Update this doc**: Document any new decisions or changes
+
+### Repository State
+- **Last commit**: "preprocessing is now actually performed in WASM and all tests still pass"
+- **Branch**: main (clean working state)
+- **Tests**: All passing
+- **Ready for**: Text model implementation
+
+The foundation is solid. The patterns are established. The next steps are clear.
