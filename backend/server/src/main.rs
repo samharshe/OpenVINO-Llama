@@ -15,7 +15,7 @@ use hyper::{
     StatusCode
 };
 use hyper_util::rt::{TokioIo, TokioTimer};
-use server::model_config::{ImageModelConfig, ModelConfig};
+use server::model_config::{ImageModelConfig, ModelConfig, ModelType};
 use tokio::{
     net::TcpListener,
     sync::{
@@ -33,7 +33,6 @@ use tokio_stream::wrappers::BroadcastStream;
 
 static NOT_FOUND: &[u8] = b"Not Found\n";
 static MISSING_CONTENT_TYPE: &[u8] = b"Missing Content-Type.\n";
-static JPEG_EXPECTED: &[u8] = b"Expected image/jpeg.\n";
 static INTERNAL_SERVER_ERROR: &[u8] = b"Internal Server Error\n";
 
 async fn infer(
@@ -45,24 +44,46 @@ async fn infer(
     log_sender.send("[server/main.rs] Received inference request.".to_string()).ok();
 
     if let Some(content_type) = request.headers().get(header::CONTENT_TYPE) {
-        if content_type != "image/jpeg" {
-            log_sender.send("[server/main.rs] Inference request has unsupported media type.".to_string()).ok();
-            return Ok(Response::builder()
-                .status(StatusCode::UNSUPPORTED_MEDIA_TYPE)
-                .body(full(JPEG_EXPECTED))
-                .unwrap());
-        }
+        let content_type_str = content_type.to_str().unwrap_or("");
+        
+        // Determine model type based on content type
+        let model_type = match content_type_str {
+            "image/jpeg" => {
+                log_sender.send("[server/main.rs] Detected image/jpeg content type.".to_string()).ok();
+                ModelType::Image
+            },
+            "text/plain" => {
+                log_sender.send("[server/main.rs] Detected text/plain content type.".to_string()).ok();
+                ModelType::Text
+            },
+            _ => {
+                log_sender.send(format!("[server/main.rs] Unsupported media type: {}", content_type_str)).ok();
+                return Ok(Response::builder()
+                    .status(StatusCode::UNSUPPORTED_MEDIA_TYPE)
+                    .body(full("Unsupported media type. Expected image/jpeg or text/plain."))
+                    .unwrap());
+            }
+        };
+        
         let mut body = request.collect().await?.aggregate();
         let bytes = body.copy_to_bytes(body.remaining());
 
-        log_sender.send("[server/main.rs] Forwarding raw JPEG data to model for processing.".to_string()).ok();
+        log_sender.send(format!("[server/main.rs] Forwarding data to {} model for processing.", 
+            match model_type {
+                ModelType::Image => "image",
+                ModelType::Text => "text",
+                _ => "unknown"
+            }
+        )).ok();
+        
         let (sender, receiver) = oneshot::channel();
         inference_thread_sender.send(InferenceRequest {
             data: bytes.to_vec(),
+            model_type,
             responder: sender,
         })?;
 
-        log_sender.send("[server/main.rs] Passed raw JPEG data to inferencer. Waiting for inference result.".to_string()).ok();
+        log_sender.send("[server/main.rs] Passed raw data to inferencer. Waiting for inference result.".to_string()).ok();
         log_sender.send("[server/main.rs] (No logs during inference because this is performed by WASM module.)".to_string()).ok();
         return match receiver.await {
             Ok(response) => {
@@ -170,8 +191,8 @@ pub async fn main() -> anyhow::Result<()>
         let module =
             Arc::new(Module::from_file(&engine, Path::new("../target/wasm32-wasip1/debug/inferencer.wasm")).unwrap());
         
-        // Create ImageModelConfig instance
-        let model_config = Arc::new(ImageModelConfig::new(
+        // Create model instances for each type
+        let image_model = Arc::new(ImageModelConfig::new(
             engine.clone(),
             module.clone(),
             log_tx_inference.clone(),
@@ -179,14 +200,40 @@ pub async fn main() -> anyhow::Result<()>
             "1.0".to_string()
         ));
         
+        // TODO: Create TextModelConfig when implemented
+        // let text_model = Arc::new(TextModelConfig::new(
+        //     engine.clone(),
+        //     module.clone(),
+        //     log_tx_inference.clone(),
+        //     "llama2_7b".to_string(),
+        //     "2.0".to_string()
+        // ));
+        
         while let Some(request) = rx.recv().await {
-            let model_config = Arc::clone(&model_config);
-            spawn_blocking(move || -> anyhow::Result<()> {
-                let result = model_config.infer(&request.data)
-                    .expect("Inference failed");
-                request.responder.send(result).unwrap();
-                Ok(())
-            });
+            match request.model_type {
+                ModelType::Image => {
+                    let model = Arc::clone(&image_model);
+                    spawn_blocking(move || -> anyhow::Result<()> {
+                        let result = model.infer(&request.data)
+                            .expect("Inference failed");
+                        request.responder.send(result).unwrap();
+                        Ok(())
+                    });
+                },
+                ModelType::Text => {
+                    // TODO: Use text model when implemented
+                    log_tx_inference.send("[server/main.rs] Text model not yet implemented.".to_string()).ok();
+                    request.responder.send(serde_json::json!({
+                        "error": "Text model not yet implemented"
+                    })).unwrap();
+                },
+                _ => {
+                    log_tx_inference.send("[server/main.rs] Unsupported model type in inference thread.".to_string()).ok();
+                    request.responder.send(serde_json::json!({
+                        "error": "Unsupported model type"
+                    })).unwrap();
+                }
+            }
         }
     });
 

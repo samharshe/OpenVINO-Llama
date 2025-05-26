@@ -66,8 +66,8 @@ async fn test_unsupported_content_type() {
     
     let response = client
         .post(format!("{}/infer", SERVER_URL))
-        .header("Content-Type", "text/plain")
-        .body("not an image")
+        .header("Content-Type", "application/xml")
+        .body("<xml>not supported</xml>")
         .send()
         .await;
     
