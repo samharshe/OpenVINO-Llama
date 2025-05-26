@@ -4,7 +4,6 @@ use wasmtime::{Engine, Module};
 use tokio::sync::broadcast;
 
 use crate::runtime::WasmInstance;
-use crate::tensor;
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -102,19 +101,17 @@ impl ModelConfig for ImageModelConfig {
         // Validate input first
         self.validate_input(data)?;
         
-        // Preprocess: JPEG → BGR tensor
-        self.log_sender.send("[ImageModelConfig] Starting preprocessing: JPEG to tensor conversion.".to_string()).ok();
-        let tensor_bytes = tensor::jpeg_to_raw_bgr(data.to_vec(), &self.log_sender)
-            .map_err(|e| InferenceError::PreprocessingFailed(format!("Failed to convert JPEG to tensor: {}", e)))?;
+        // Pass raw JPEG directly to WASM (WASM handles preprocessing now)
+        self.log_sender.send("[ImageModelConfig] Passing raw JPEG to WASM for inference.".to_string()).ok();
         
         // Create WASM instance and run inference
         self.log_sender.send("[ImageModelConfig] Creating WASM instance for inference.".to_string()).ok();
         let mut wasm_instance = WasmInstance::new(self.engine.clone(), self.module.clone())
             .map_err(|e| InferenceError::ModelLoadFailed(e.to_string()))?;
         
-        // Run inference on preprocessed tensor
-        self.log_sender.send("[ImageModelConfig] Running inference on preprocessed tensor.".to_string()).ok();
-        let result = wasm_instance.infer(tensor_bytes)
+        // Run inference on raw JPEG data
+        self.log_sender.send("[ImageModelConfig] Running inference on raw JPEG data.".to_string()).ok();
+        let result = wasm_instance.infer(data.to_vec())
             .map_err(|e| InferenceError::InferenceFailed(e.to_string()))?;
         
         self.log_sender.send("[ImageModelConfig] Inference complete, returning result.".to_string()).ok();

@@ -13,7 +13,7 @@ pub fn jpeg_to_raw_bgr(jpeg_bytes: &[u8]) -> Result<Vec<u8>, String> {
     
     // Convert to RGB8 format and resize to 224x224
     let rgb_img = img.to_rgb8();
-    let resized = imageops::resize(&rgb_img, 224, 224, imageops::FilterType::Triangle);
+    let resized = imageops::resize(&rgb_img, 224, 224, imageops::FilterType::Lanczos3);
     info!("Resized image to 224x224");
     
     // Convert to NCHW format (channels first)
@@ -24,11 +24,11 @@ pub fn jpeg_to_raw_bgr(jpeg_bytes: &[u8]) -> Result<Vec<u8>, String> {
         let idx = (y * 224 + x) as usize;
         let Rgb([r, g, b]) = *pixel;
         
-        // Convert to float and normalize to [0, 1]
+        // Convert to float WITHOUT normalization (keep 0-255 range)
         // Note: BGR order for OpenVINO compatibility
-        nchw_data[idx] = b as f32 / 255.0;                    // Blue channel
-        nchw_data[224 * 224 + idx] = g as f32 / 255.0;       // Green channel  
-        nchw_data[2 * 224 * 224 + idx] = r as f32 / 255.0;   // Red channel
+        nchw_data[idx] = b as f32;                    // Blue channel
+        nchw_data[224 * 224 + idx] = g as f32;       // Green channel  
+        nchw_data[2 * 224 * 224 + idx] = r as f32;   // Red channel
     }
     info!("Converted image to NCHW format with BGR channel order");
     
