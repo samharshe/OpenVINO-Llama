@@ -2,6 +2,7 @@ use log::{error, warn, info};
 
 pub mod registry;
 pub mod imagenet_labels;
+pub mod preprocessing;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct InferenceResult(pub usize, pub f32);
@@ -210,5 +211,18 @@ impl MobilnetModel {
     
     pub fn run_inference_compat(&self, tensor: wasi_nn::Tensor) -> Result<Option<InferenceResult>, String> {
         <Model<ImageNetConfig>>::run_inference(self, tensor)
+    }
+    
+    /// New method to handle raw JPEG input
+    pub fn infer_from_jpeg(&self, jpeg_bytes: &[u8]) -> Result<Option<InferenceResult>, String> {
+        // Preprocess JPEG to tensor
+        let tensor_bytes = crate::preprocessing::jpeg_to_raw_bgr(jpeg_bytes)?;
+        
+        // Create tensor from preprocessed data
+        let tensor = self.tensor_from_raw_data(&tensor_bytes)
+            .map_err(|e| format!("Failed to create tensor: {:?}", e))?;
+        
+        // Run inference
+        self.run_inference(tensor)
     }
 }

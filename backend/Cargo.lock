@@ -1434,6 +1434,19 @@ dependencies = [
 
 [[package]]
 name = "image"
+version = "0.24.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5690139d2f55868e080017335e4b94cb7414274c74f1669c84fb5feba2c9f69d"
+dependencies = [
+ "bytemuck",
+ "byteorder",
+ "color_quant",
+ "jpeg-decoder",
+ "num-traits",
+]
+
+[[package]]
+name = "image"
 version = "0.25.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db35664ce6b9810857a38a906215e75a9c879f0696556a39f59c62829710251a"
@@ -1487,6 +1500,7 @@ name = "inferencer"
 version = "0.0.0"
 dependencies = [
  "env_logger 0.10.2",
+ "image 0.24.9",
  "log",
  "serde",
  "serde_json",
@@ -2675,7 +2689,7 @@ dependencies = [
  "http-body-util",
  "hyper 1.6.0",
  "hyper-util",
- "image",
+ "image 0.25.6",
  "opencv",
  "reqwest",
  "serde",
