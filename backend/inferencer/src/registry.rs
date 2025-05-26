@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use log::info;
 use serde::{Deserialize, Serialize};
-use crate::{Model, ImageNetConfig};
+use crate::{Model, ImageNetConfig, imagenet_labels};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ModelMetadata {
@@ -16,7 +16,7 @@ pub enum RegisteredModel {
 }
 
 impl RegisteredModel {
-    pub fn infer(&self, data: &[u8]) -> Result<serde_json::Value, String> {
+    pub fn infer(&self, data: &[u8], metadata: &ModelMetadata) -> Result<serde_json::Value, String> {
         match self {
             RegisteredModel::ImageNet(model) => {
                 // For now, still expect preprocessed tensor
@@ -26,16 +26,26 @@ impl RegisteredModel {
                 
                 let result = model.run_inference(tensor)?;
                 
-                match result {
-                    Some(res) => Ok(serde_json::json!({
-                        "class_index": res.0,
-                        "confidence": res.1
-                    })),
-                    None => Ok(serde_json::json!({
-                        "class_index": 0,
-                        "confidence": 0.0
-                    }))
-                }
+                let (class_idx, confidence) = match result {
+                    Some(res) => (res.0, res.1),
+                    None => (0, 0.0)
+                };
+                
+                // Use ImageNet labels for this model type
+                let label = imagenet_labels::get_imagenet_label(class_idx);
+                
+                Ok(serde_json::json!({
+                    "output": label,
+                    "metadata": {
+                        "probability": confidence,
+                        "class_index": class_idx
+                    },
+                    "model_info": {
+                        "name": metadata.name,
+                        "version": metadata.version,
+                        "model_type": metadata.model_type
+                    }
+                }))
             }
         }
     }

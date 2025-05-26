@@ -1,6 +1,7 @@
 use log::{error, warn, info};
 
 pub mod registry;
+pub mod imagenet_labels;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct InferenceResult(pub usize, pub f32);
