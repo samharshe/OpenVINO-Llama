@@ -1,6 +1,5 @@
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::oneshot;
 
@@ -12,9 +11,6 @@ pub fn full<T: Into<Bytes>>(chunk: T) -> BoxBody
 {
     Full::new(chunk.into()).map_err(|never| match never {}).boxed()
 }
-
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct InferenceResult(pub u32, pub f32);
 
 #[derive(Debug)]
 pub struct InferenceRequest
