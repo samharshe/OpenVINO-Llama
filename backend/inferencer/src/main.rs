@@ -1,7 +1,7 @@
 use std::{fs, sync::Mutex};
-use log::{error, info};
+use log::{error, info, warn};
 
-use inferencer::{MobilnetModel, registry::{ModelRegistry, RegisteredModel, ModelMetadata}};
+use inferencer::{MobilnetModel, TextModel, registry::{ModelRegistry, RegisteredModel, ModelMetadata}, preprocessing, text_preprocessing};
 
 // Removed hardcoded ImageNet labels - models should handle their own output formatting
 
@@ -43,7 +43,40 @@ fn ensure_registry() -> Result<u32, String> {
         };
         
         let id = registry.register_model(RegisteredModel::ImageNet(model), metadata);
-        info!("Default model loaded with ID: {}", id);
+        info!("Default image model loaded with ID: {}", id);
+        
+        // Register a dummy text model for testing
+        // In production, this would load real model files
+        if let Ok(dummy_tokenizer_json) = std::fs::read_to_string("fixture/tokenizer.json")
+            .or_else(|_| Ok::<String, std::io::Error>(r#"{"version":"1.0","truncation":null,"padding":null}"#.to_string())) {
+            
+            // Create dummy model data
+            let dummy_xml = b"<dummy_text_model/>".to_vec();
+            let dummy_weights = vec![0u8; 100]; // Dummy weights
+            
+            match TextModel::from_buffer_with_tokenizer(
+                dummy_xml, 
+                dummy_weights, 
+                dummy_tokenizer_json.into_bytes()
+            ) {
+                Ok((text_model, tokenizer)) => {
+                    let text_metadata = ModelMetadata {
+                        name: "dummy_text_model".to_string(),
+                        version: "1.0".to_string(),
+                        model_type: "text".to_string(),
+                    };
+                    let text_id = registry.register_model(
+                        RegisteredModel::Text { model: text_model, tokenizer },
+                        text_metadata
+                    );
+                    info!("Dummy text model loaded with ID: {}", text_id);
+                },
+                Err(e) => {
+                    warn!("Failed to load dummy text model: {}. Text inference will not work.", e);
+                }
+            }
+        }
+        
         Ok(id)
     } else {
         Ok(1) // Return ID of first model
@@ -92,8 +125,22 @@ pub extern "C" fn load_model(_xml_ptr: i32, _xml_len: i32, _weights_ptr: i32, _w
 }
 
 #[no_mangle]
-pub extern "C" fn infer(tensor_ptr: i32, tensor_len: i32, result_ptr: i32) -> i32 {
-    infer_with_model(tensor_ptr, tensor_len, result_ptr, 1) // Use model ID 1 for backward compatibility
+pub extern "C" fn infer(data_ptr: i32, data_len: i32, result_ptr: i32) -> i32 {
+    // Auto-detect input type and route to appropriate model
+    let data = unsafe { std::slice::from_raw_parts(data_ptr as *const u8, data_len as usize) };
+    
+    // Detect input type
+    let model_id = if preprocessing::is_jpeg(data) || preprocessing::is_tensor(data) {
+        1 // Image model
+    } else if text_preprocessing::is_text(data) {
+        2 // Text model (if registered)
+    } else {
+        error!("Unable to detect input type");
+        return -1;
+    };
+    
+    info!("Auto-detected model ID: {} for input", model_id);
+    infer_with_model(data_ptr, data_len, result_ptr, model_id)
 }
 
 #[no_mangle]
@@ -144,4 +191,66 @@ pub extern "C" fn infer_with_model(data_ptr: i32, data_len: i32, result_ptr: i32
     }
     
     0 // Success
+}
+
+#[no_mangle]
+pub extern "C" fn register_text_model(
+    xml_ptr: i32, 
+    xml_len: i32, 
+    weights_ptr: i32, 
+    weights_len: i32,
+    tokenizer_ptr: i32,
+    tokenizer_len: i32,
+    metadata_ptr: i32,
+    metadata_len: i32
+) -> i32 {
+    // Validate parameters
+    if xml_ptr == 0 || xml_len <= 0 || weights_ptr == 0 || weights_len <= 0 ||
+       tokenizer_ptr == 0 || tokenizer_len <= 0 || metadata_ptr == 0 || metadata_len <= 0 {
+        error!("Invalid parameters for text model registration");
+        return -1;
+    }
+    
+    // Get data slices
+    let xml = unsafe { std::slice::from_raw_parts(xml_ptr as *const u8, xml_len as usize) };
+    let weights = unsafe { std::slice::from_raw_parts(weights_ptr as *const u8, weights_len as usize) };
+    let tokenizer_json = unsafe { std::slice::from_raw_parts(tokenizer_ptr as *const u8, tokenizer_len as usize) };
+    let metadata_bytes = unsafe { std::slice::from_raw_parts(metadata_ptr as *const u8, metadata_len as usize) };
+    
+    // Parse metadata
+    let metadata: ModelMetadata = match serde_json::from_slice(metadata_bytes) {
+        Ok(m) => m,
+        Err(e) => {
+            error!("Failed to parse metadata: {}", e);
+            return -2;
+        }
+    };
+    
+    // Create text model with tokenizer
+    let (model, tokenizer) = match TextModel::from_buffer_with_tokenizer(
+        xml.to_vec(), 
+        weights.to_vec(), 
+        tokenizer_json.to_vec()
+    ) {
+        Ok((m, t)) => (m, t),
+        Err(e) => {
+            error!("Failed to create text model: {}", e);
+            return -3;
+        }
+    };
+    
+    // Register in the registry
+    let mut registry_guard = MODEL_REGISTRY.lock().unwrap();
+    if registry_guard.is_none() {
+        *registry_guard = Some(ModelRegistry::new());
+    }
+    let registry = registry_guard.as_mut().unwrap();
+    
+    let id = registry.register_model(
+        RegisteredModel::Text { model, tokenizer },
+        metadata
+    );
+    
+    info!("Text model registered with ID: {}", id);
+    id as i32
 }

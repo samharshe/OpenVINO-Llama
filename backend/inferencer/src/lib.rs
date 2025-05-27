@@ -3,6 +3,7 @@ use log::{error, warn, info};
 pub mod registry;
 pub mod imagenet_labels;
 pub mod preprocessing;
+pub mod text_preprocessing;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct InferenceResult(pub usize, pub f32);
@@ -224,5 +225,105 @@ impl MobilnetModel {
         
         // Run inference
         self.run_inference(tensor)
+    }
+}
+
+// Text Model Implementation
+pub type TextModel = Model<TextModelConfig>;
+
+impl TextModel {
+    /// Create a new text model from buffers with tokenizer
+    pub fn from_buffer_with_tokenizer(xml: Vec<u8>, weights: Vec<u8>, tokenizer_json: Vec<u8>) -> Result<(Self, tokenizers::tokenizer::Tokenizer), String> {
+        // Create the tokenizer from JSON bytes
+        let tokenizer = tokenizers::tokenizer::Tokenizer::from_bytes(&tokenizer_json)
+            .map_err(|e| format!("Failed to create tokenizer: {}", e))?;
+        
+        // Create the model config
+        let config = TextModelConfig {
+            vocab_size: 50257, // GPT-2 vocab size, should be configurable
+            sequence_length: 512, // Default max sequence length
+            input_dims: vec![1, 512], // [batch_size, sequence_length]
+        };
+        
+        let model = Model::<TextModelConfig>::from_buffer(xml, weights, config)?;
+        
+        Ok((model, tokenizer))
+    }
+    
+    /// Infer from raw UTF-8 text input
+    pub fn infer_from_text(&self, text_bytes: &[u8], tokenizer: &tokenizers::tokenizer::Tokenizer) -> Result<String, String> {
+        // Validate text input
+        let text = std::str::from_utf8(text_bytes)
+            .map_err(|e| format!("Invalid UTF-8 text: {}", e))?;
+        
+        info!("Processing text input: {} characters", text.len());
+        
+        // Tokenize the text
+        let token_ids = crate::text_preprocessing::tokenize_text(text, tokenizer)?;
+        info!("Tokenized to {} tokens", token_ids.len());
+        
+        // Create attention mask
+        let attention_mask = crate::text_preprocessing::create_attention_mask(&token_ids);
+        
+        // Convert to i32 for tensor (WASI-NN expects i32 for token IDs)
+        let token_ids_i32: Vec<i32> = token_ids.iter().map(|&id| id as i32).collect();
+        
+        // Create input tensors
+        let input_ids_tensor = wasi_nn::Tensor {
+            dimensions: &[1, token_ids_i32.len() as u32],
+            r#type: wasi_nn::TENSOR_TYPE_I32,
+            data: unsafe {
+                std::slice::from_raw_parts(
+                    token_ids_i32.as_ptr() as *const u8,
+                    token_ids_i32.len() * std::mem::size_of::<i32>()
+                )
+            },
+        };
+        
+        let attention_mask_tensor = wasi_nn::Tensor {
+            dimensions: &[1, attention_mask.len() as u32],
+            r#type: wasi_nn::TENSOR_TYPE_I32,
+            data: unsafe {
+                std::slice::from_raw_parts(
+                    attention_mask.as_ptr() as *const u8,
+                    attention_mask.len() * std::mem::size_of::<i32>()
+                )
+            },
+        };
+        
+        // Set inputs
+        unsafe {
+            // Set input_ids (index 0)
+            wasi_nn::set_input(self.context_ptr, 0, input_ids_tensor)
+                .map_err(|e| format!("Failed to set input_ids: {:?}", e))?;
+            
+            // Set attention_mask (index 1)
+            wasi_nn::set_input(self.context_ptr, 1, attention_mask_tensor)
+                .map_err(|e| format!("Failed to set attention_mask: {:?}", e))?;
+            
+            // Run inference
+            wasi_nn::compute(self.context_ptr)
+                .map_err(|e| format!("Failed to compute: {:?}", e))?;
+        }
+        
+        // Get output (assuming output is logits)
+        let output_size = self.config.vocab_size * token_ids.len();
+        let mut output_buffer = vec![0f32; output_size];
+        
+        unsafe {
+            wasi_nn::get_output(
+                self.context_ptr,
+                0,
+                output_buffer.as_mut_ptr() as *mut u8,
+                (output_buffer.len() * std::mem::size_of::<f32>())
+                    .try_into()
+                    .unwrap(),
+            )
+            .map_err(|e| format!("Failed to get output: {:?}", e))?;
+        }
+        
+        // For now, return a placeholder response
+        // In a real implementation, we'd decode the logits back to text
+        Ok(format!("Processed {} tokens from input text", token_ids.len()))
     }
 }

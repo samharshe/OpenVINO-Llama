@@ -209,8 +209,11 @@ pub async fn main() -> anyhow::Result<()>
             config_inference.image_model.version.clone()
         ));
         
-        // Create text model config (placeholder implementation)
+        // Create text model config with WASM support
         let text_model = Arc::new(TextModelConfig::new(
+            engine.clone(),
+            module.clone(),
+            log_tx_inference.clone(),
             config_inference.text_model.name.clone(),
             config_inference.text_model.version.clone()
         ));

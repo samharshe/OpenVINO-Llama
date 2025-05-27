@@ -128,14 +128,28 @@ impl ModelConfig for ImageModelConfig {
 }
 
 pub struct TextModelConfig {
+    engine: Arc<Engine>,
+    module: Arc<Module>,
+    log_sender: broadcast::Sender<String>,
     name: String,
     version: String,
 }
 
 impl TextModelConfig {
-    #[allow(dead_code)]
-    pub fn new(name: String, version: String) -> Self {
-        Self { name, version }
+    pub fn new(
+        engine: Arc<Engine>, 
+        module: Arc<Module>,
+        log_sender: broadcast::Sender<String>,
+        name: String,
+        version: String,
+    ) -> Self {
+        Self {
+            engine,
+            module,
+            log_sender,
+            name,
+            version,
+        }
     }
 }
 
@@ -155,25 +169,24 @@ impl ModelConfig for TextModelConfig {
     }
     
     fn infer(&self, data: &[u8]) -> Result<serde_json::Value, InferenceError> {
-        let input_text = std::str::from_utf8(data)
-            .map_err(|e| InferenceError::PreprocessingFailed(e.to_string()))?;
+        // Validate input first
+        self.validate_input(data)?;
         
-        // Mock response following the required JSON structure
-        let response = serde_json::json!({
-            "output": format!("Mock response to: {}", input_text),
-            "metadata": {
-                "token_count": input_text.split_whitespace().count(),
-                "inference_time_ms": 42,
-                "temperature": 0.7
-            },
-            "model_info": {
-                "name": self.name,
-                "version": self.version,
-                "model_type": "Text"
-            }
-        });
+        // Pass raw UTF-8 text directly to WASM (WASM handles tokenization now)
+        self.log_sender.send("[TextModelConfig] Passing raw text to WASM for inference.".to_string()).ok();
         
-        Ok(response)
+        // Create WASM instance and run inference
+        self.log_sender.send("[TextModelConfig] Creating WASM instance for text inference.".to_string()).ok();
+        let mut wasm_instance = WasmInstance::new(self.engine.clone(), self.module.clone())
+            .map_err(|e| InferenceError::ModelLoadFailed(e.to_string()))?;
+        
+        // Run inference on raw text data
+        self.log_sender.send("[TextModelConfig] Running inference on text data.".to_string()).ok();
+        let result = wasm_instance.infer(data.to_vec())
+            .map_err(|e| InferenceError::InferenceFailed(e.to_string()))?;
+        
+        self.log_sender.send("[TextModelConfig] Text inference complete, returning result.".to_string()).ok();
+        Ok(result)
     }
     
     fn model_info(&self) -> ModelInfo {
