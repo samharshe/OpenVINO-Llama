@@ -1,5 +1,5 @@
 
-use std::{net::SocketAddr, path::Path, sync::Arc};
+use std::sync::Arc;
 
 use bytes::Buf;
 use http_body_util::BodyExt;
@@ -16,6 +16,7 @@ use hyper::{
 };
 use hyper_util::rt::{TokioIo, TokioTimer};
 use server::model_config::{ImageModelConfig, ModelConfig, ModelType};
+use server::config::AppConfig;
 use tokio::{
     net::TcpListener,
     sync::{
@@ -178,26 +179,34 @@ async fn serve(
 #[tokio::main]
 pub async fn main() -> anyhow::Result<()>
 {
-    let addr: SocketAddr = ([127, 0, 0, 1], 3000).into();
+    // Load configuration
+    let config = AppConfig::load();
+    
+    let addr = config.socket_addr();
     let listener = TcpListener::bind(addr).await?;
+    println!("Server listening on {}", addr);
+    
     let (tx, mut rx) = unbounded_channel::<InferenceRequest>();
 
     let (log_tx, _log_rx) = broadcast::channel::<String>(16);
     let log_tx_inference = log_tx.clone();
 
+    // Clone config for the inference thread
+    let config_inference = config.clone();
+    
     tokio::spawn(async move {
         log_tx_inference.send("Inference thread is active and working.".to_string()).ok();
         let engine = Arc::new(Engine::new(&Config::new()).unwrap());
         let module =
-            Arc::new(Module::from_file(&engine, Path::new("../target/wasm32-wasip1/debug/inferencer.wasm")).unwrap());
+            Arc::new(Module::from_file(&engine, &config_inference.wasm_module_path).unwrap());
         
         // Create model instances for each type
         let image_model = Arc::new(ImageModelConfig::new(
             engine.clone(),
             module.clone(),
             log_tx_inference.clone(),
-            "mobilenet_v3_large".to_string(),
-            "1.0".to_string()
+            config_inference.image_model.name.clone(),
+            config_inference.image_model.version.clone()
         ));
         
         // TODO: Create TextModelConfig when implemented
@@ -205,8 +214,8 @@ pub async fn main() -> anyhow::Result<()>
         //     engine.clone(),
         //     module.clone(),
         //     log_tx_inference.clone(),
-        //     "llama2_7b".to_string(),
-        //     "2.0".to_string()
+        //     config_inference.text_model.name.clone(),
+        //     config_inference.text_model.version.clone()
         // ));
         
         while let Some(request) = rx.recv().await {
