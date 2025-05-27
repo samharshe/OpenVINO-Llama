@@ -240,9 +240,9 @@ impl TextModel {
         
         // Create the model config
         let config = TextModelConfig {
-            vocab_size: 50257, // GPT-2 vocab size, should be configurable
-            sequence_length: 512, // Default max sequence length
-            input_dims: vec![1, 512], // [batch_size, sequence_length]
+            vocab_size: 128256, // Llama-3.2 vocab size
+            sequence_length: 2048, // Reasonable default for Llama
+            input_dims: vec![1, 2048], // [batch_size, sequence_length]
         };
         
         let model = Model::<TextModelConfig>::from_buffer(xml, weights, config)?;

@@ -45,24 +45,37 @@ fn ensure_registry() -> Result<u32, String> {
         let id = registry.register_model(RegisteredModel::ImageNet(model), metadata);
         info!("Default image model loaded with ID: {}", id);
         
-        // Register a dummy text model for testing
-        // In production, this would load real model files
-        if let Ok(dummy_tokenizer_json) = std::fs::read_to_string("fixture/tokenizer.json")
-            .or_else(|_| Ok::<String, std::io::Error>(r#"{"version":"1.0","truncation":null,"padding":null}"#.to_string())) {
+        // TEMPORARILY COMMENTED OUT: Text model loading
+        // The Llama model is 1.85GB and causes startup hangs
+        /*
+        // Register the Llama text model
+        if let Ok(tokenizer_json) = std::fs::read("fixture/text_model/tokenizer.json") {
+            // Load real model files
+            let xml = match std::fs::read("fixture/text_model/openvino_model.xml") {
+                Ok(data) => data,
+                Err(e) => {
+                    warn!("Failed to load text model XML: {}. Text inference unavailable.", e);
+                    return Ok(id);
+                }
+            };
             
-            // Create dummy model data
-            let dummy_xml = b"<dummy_text_model/>".to_vec();
-            let dummy_weights = vec![0u8; 100]; // Dummy weights
+            let weights = match std::fs::read("fixture/text_model/openvino_model.bin") {
+                Ok(data) => data,
+                Err(e) => {
+                    warn!("Failed to load text model weights: {}. Text inference unavailable.", e);
+                    return Ok(id);
+                }
+            };
             
             match TextModel::from_buffer_with_tokenizer(
-                dummy_xml, 
-                dummy_weights, 
-                dummy_tokenizer_json.into_bytes()
+                xml, 
+                weights, 
+                tokenizer_json
             ) {
                 Ok((text_model, tokenizer)) => {
                     let text_metadata = ModelMetadata {
-                        name: "dummy_text_model".to_string(),
-                        version: "1.0".to_string(),
+                        name: "llama-3.2-3b-instruct".to_string(),
+                        version: "int4".to_string(),
                         model_type: "text".to_string(),
                     };
                     let text_id = registry.register_model(
@@ -76,6 +89,7 @@ fn ensure_registry() -> Result<u32, String> {
                 }
             }
         }
+        */
         
         Ok(id)
     } else {
