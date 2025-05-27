@@ -102,3 +102,44 @@ async fn test_logs_endpoint() {
     assert_eq!(resp.status(), 200);
     assert_eq!(resp.headers().get("content-type").unwrap(), "text/event-stream");
 }
+
+#[tokio::test]
+async fn test_text_inference_placeholder() {
+    // Test that text/plain content type routes to text model
+    // and returns properly formatted response
+    
+    let client = reqwest::Client::new();
+    
+    let test_text = "This is a test sentence.";
+    
+    let response = client
+        .post(format!("{}/infer", SERVER_URL))
+        .header("Content-Type", "text/plain")
+        .body(test_text)
+        .send()
+        .await;
+    
+    let resp = response.expect("Failed to connect to server - is it running on port 3000?");
+    assert_eq!(resp.status(), 200);
+    assert_eq!(resp.headers().get("content-type").unwrap(), "application/json");
+    
+    let json: Value = resp.json().await.expect("Response should be valid JSON");
+    
+    // Validate required JSON structure
+    assert!(json.is_object());
+    let obj = json.as_object().unwrap();
+    
+    // Should have the three required top-level fields
+    assert!(obj.contains_key("output"));
+    assert!(obj.contains_key("metadata"));
+    assert!(obj.contains_key("model_info"));
+    
+    // Verify model_info shows Text type
+    let model_info = &obj["model_info"];
+    assert_eq!(model_info["model_type"], "Text");
+    
+    // Verify output contains our mock response
+    let output = obj["output"].as_str().unwrap();
+    assert!(output.contains("Mock response to:"));
+    assert!(output.contains(test_text));
+}

@@ -15,7 +15,7 @@ use hyper::{
     StatusCode
 };
 use hyper_util::rt::{TokioIo, TokioTimer};
-use server::model_config::{ImageModelConfig, ModelConfig, ModelType};
+use server::model_config::{ImageModelConfig, TextModelConfig, ModelConfig, ModelType};
 use server::config::AppConfig;
 use tokio::{
     net::TcpListener,
@@ -209,14 +209,11 @@ pub async fn main() -> anyhow::Result<()>
             config_inference.image_model.version.clone()
         ));
         
-        // TODO: Create TextModelConfig when implemented
-        // let text_model = Arc::new(TextModelConfig::new(
-        //     engine.clone(),
-        //     module.clone(),
-        //     log_tx_inference.clone(),
-        //     config_inference.text_model.name.clone(),
-        //     config_inference.text_model.version.clone()
-        // ));
+        // Create text model config (placeholder implementation)
+        let text_model = Arc::new(TextModelConfig::new(
+            config_inference.text_model.name.clone(),
+            config_inference.text_model.version.clone()
+        ));
         
         while let Some(request) = rx.recv().await {
             match request.model_type {
@@ -230,11 +227,15 @@ pub async fn main() -> anyhow::Result<()>
                     });
                 },
                 ModelType::Text => {
-                    // TODO: Use text model when implemented
-                    log_tx_inference.send("[server/main.rs] Text model not yet implemented.".to_string()).ok();
-                    request.responder.send(serde_json::json!({
-                        "error": "Text model not yet implemented"
-                    })).unwrap();
+                    let model = Arc::clone(&text_model);
+                    let log_tx = log_tx_inference.clone();
+                    spawn_blocking(move || -> anyhow::Result<()> {
+                        log_tx.send("[server/main.rs] Processing text inference request.".to_string()).ok();
+                        let result = model.infer(&request.data)
+                            .expect("Text inference failed");
+                        request.responder.send(result).unwrap();
+                        Ok(())
+                    });
                 },
                 _ => {
                     log_tx_inference.send("[server/main.rs] Unsupported model type in inference thread.".to_string()).ok();
