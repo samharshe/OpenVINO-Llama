@@ -95,6 +95,12 @@ pub type MobilnetModel = Model<ImageNetConfig>;
 
 impl<C: ModelConfig> Model<C> {
     pub fn from_buffer(xml: Vec<u8>, weights: Vec<u8>, config: C) -> Result<Self, String> {
+        info!("Model::from_buffer called with XML size: {}, weights size: {}", 
+             xml.len(), weights.len());
+        
+        info!("Calling wasi_nn::load...");
+        let start = std::time::Instant::now();
+        
         let _graph_ptr = unsafe {
             wasi_nn::load(
                 &[&xml, &weights],
@@ -104,9 +110,15 @@ impl<C: ModelConfig> Model<C> {
             .map_err(|e| {
                 let err_msg = format!("Failed to load graph: {:?}", e);
                 error!("{}", err_msg);
+                error!("This happened after {} ms", start.elapsed().as_millis());
                 err_msg
             })?
         };
+        
+        info!("wasi_nn::load completed successfully after {} ms, graph_ptr={}", 
+             start.elapsed().as_millis(), _graph_ptr);
+        
+        info!("Initializing execution context...");
         let context_ptr = unsafe {
             wasi_nn::init_execution_context(_graph_ptr)
                 .map_err(|e| {
@@ -115,7 +127,10 @@ impl<C: ModelConfig> Model<C> {
                     err_msg
                 })?
         };
+        
+        info!("Execution context initialized, context_ptr={}", context_ptr);
         info!("Model loaded successfully with output size: {}", config.output_size());
+        
         Ok(Self {
             context_ptr,
             _graph_ptr,
@@ -234,18 +249,32 @@ pub type TextModel = Model<TextModelConfig>;
 impl TextModel {
     /// Create a new text model from buffers with tokenizer
     pub fn from_buffer_with_tokenizer(xml: Vec<u8>, weights: Vec<u8>, tokenizer_json: Vec<u8>) -> Result<(Self, tokenizers::tokenizer::Tokenizer), String> {
+        info!("Starting text model loading...");
+        info!("XML size: {} bytes", xml.len());
+        info!("Weights size: {} bytes", weights.len());
+        info!("Tokenizer JSON size: {} bytes", tokenizer_json.len());
+        
         // Create the tokenizer from JSON bytes
+        info!("Creating tokenizer from JSON...");
         let tokenizer = tokenizers::tokenizer::Tokenizer::from_bytes(&tokenizer_json)
-            .map_err(|e| format!("Failed to create tokenizer: {}", e))?;
+            .map_err(|e| {
+                error!("Failed to create tokenizer: {}", e);
+                format!("Failed to create tokenizer: {}", e)
+            })?;
+        info!("Tokenizer created successfully");
         
         // Create the model config
         let config = TextModelConfig {
-            vocab_size: 128256, // Llama-3.2 vocab size
-            sequence_length: 2048, // Reasonable default for Llama
+            vocab_size: 32000, // TinyLlama vocab size
+            sequence_length: 2048, // TinyLlama supports up to 2048
             input_dims: vec![1, 2048], // [batch_size, sequence_length]
         };
+        info!("Created TextModelConfig with vocab_size={}, sequence_length={}", 
+             config.vocab_size, config.sequence_length);
         
+        info!("Loading model with wasi_nn::load...");
         let model = Model::<TextModelConfig>::from_buffer(xml, weights, config)?;
+        info!("Model loaded successfully!");
         
         Ok((model, tokenizer))
     }

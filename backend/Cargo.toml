@@ -1,3 +1,11 @@
 [workspace]
 members = ["server", "inferencer"]
 resolver = "2"
+
+[[bin]]
+name = "test_native_model"
+path = "test_native_model.rs"
+
+[dependencies]
+tokenizers = { version = "0.19", default-features = false }
+env_logger = "0.10"

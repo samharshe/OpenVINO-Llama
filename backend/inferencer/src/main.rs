@@ -45,11 +45,10 @@ fn ensure_registry() -> Result<u32, String> {
         let id = registry.register_model(RegisteredModel::ImageNet(model), metadata);
         info!("Default image model loaded with ID: {}", id);
         
-        // TEMPORARILY COMMENTED OUT: Text model loading
-        // The Llama model is 1.85GB and causes startup hangs
-        /*
-        // Register the Llama text model
+        // Register the TinyLlama text model
         if let Ok(tokenizer_json) = std::fs::read("fixture/text_model/tokenizer.json") {
+            info!("Found tokenizer.json, attempting to load TinyLlama model...");
+            
             // Load real model files
             let xml = match std::fs::read("fixture/text_model/openvino_model.xml") {
                 Ok(data) => data,
@@ -67,6 +66,9 @@ fn ensure_registry() -> Result<u32, String> {
                 }
             };
             
+            info!("Loaded TinyLlama model files - XML: {} bytes, weights: {} bytes", 
+                 xml.len(), weights.len());
+            
             match TextModel::from_buffer_with_tokenizer(
                 xml, 
                 weights, 
@@ -74,22 +76,22 @@ fn ensure_registry() -> Result<u32, String> {
             ) {
                 Ok((text_model, tokenizer)) => {
                     let text_metadata = ModelMetadata {
-                        name: "llama-3.2-3b-instruct".to_string(),
-                        version: "int4".to_string(),
+                        name: "tinyllama-1.1b-chat".to_string(),
+                        version: "v1.0-int4".to_string(),
                         model_type: "text".to_string(),
                     };
                     let text_id = registry.register_model(
                         RegisteredModel::Text { model: text_model, tokenizer },
                         text_metadata
                     );
-                    info!("Dummy text model loaded with ID: {}", text_id);
+                    info!("TinyLlama model loaded successfully with ID: {}", text_id);
                 },
                 Err(e) => {
-                    warn!("Failed to load dummy text model: {}. Text inference will not work.", e);
+                    warn!("Failed to load TinyLlama model: {}. Text inference will not work.", e);
                 }
             }
         }
-        */
+        
         
         Ok(id)
     } else {
