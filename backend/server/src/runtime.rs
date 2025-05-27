@@ -70,7 +70,12 @@ impl WasmInstance
 
         let infer = self.instance.get_typed_func::<(i32, i32, i32), i32>(&mut self.store, "infer")?;
 
-        infer.call(&mut self.store, (ptr as i32, tensor_bytes.len() as i32, result_ptr))?;
+        let result = infer.call(&mut self.store, (ptr as i32, tensor_bytes.len() as i32, result_ptr))?;
+        
+        // Check if WASM inference succeeded
+        if result != 0 {
+            return Err(anyhow::anyhow!("WASM inference failed with code: {}", result));
+        }
         
         // Read length first (4 bytes)
         let mut length_buf = [0u8; 4];
