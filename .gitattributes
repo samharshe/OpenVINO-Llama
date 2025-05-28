@@ -1,1 +1,2 @@
 backend/server/fixture/text_model/** filter=lfs diff=lfs merge=lfs -text
+*.tflite filter=lfs diff=lfs merge=lfs -text
