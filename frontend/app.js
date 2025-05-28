@@ -67,12 +67,12 @@ chatForm.addEventListener('submit', async function(e) {
     const processingMessage = addMessage('Processing your request...', false);
     
     try {
-        const response = await fetch(`${serverURL}/chat`, {
+        const response = await fetch(`${serverURL}/infer`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'text/plain',
             },
-            body: JSON.stringify({ message: userMessage })
+            body: userMessage
         });
         
         if (!response.ok) {
@@ -82,7 +82,7 @@ chatForm.addEventListener('submit', async function(e) {
         const data = await response.json();
         
         processingMessage.remove();
-        addMessage(data.response, false);
+        addMessage(data.output || data.response || 'No response', false);
         
     } catch (error) {
         console.error('Error:', error);
