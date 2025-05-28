@@ -170,3 +170,75 @@ h1 {
 .chat-history::-webkit-scrollbar-thumb:hover {
     background: var(--color-secondary-asphalt);
 }
+
+.mode-toggle {
+    display: flex;
+    gap: 8px;
+    margin-right: 16px;
+}
+
+.mode-btn {
+    padding: 8px 16px;
+    border: 1px solid var(--color-primary-electric);
+    background: var(--color-primary-pure-white);
+    color: var(--color-primary-electric);
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: var(--typeface-standard);
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+.mode-btn:hover {
+    background: var(--color-secondary-light-electric);
+}
+
+.mode-btn.active {
+    background: var(--color-primary-electric);
+    color: var(--color-primary-pure-white);
+}
+
+.gallery {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    padding: 16px;
+    justify-items: center;
+}
+
+@media (max-width: 900px) {
+    .gallery {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 500px) {
+    .gallery {
+        grid-template-columns: repeat(1, 1fr);
+    }
+}
+
+.gallery img {
+    width: 140px;
+    height: 140px;
+    margin: 8px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.gallery img:hover {
+    transform: scale(1.05);
+}
+
+.gallery img:last-of-type {
+    border: 2px dashed black;
+}
+
+.model-output {
+    font-family: monospace;
+    border-left: 4px solid var(--color-primary-zircon);
+    padding: 16px;
+    margin: 16px;
+    font-size: 14px;
+}
