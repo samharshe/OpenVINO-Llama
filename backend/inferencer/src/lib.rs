@@ -72,15 +72,15 @@ impl ModelConfig for TextModelConfig {
     }
     
     fn validate_input(&self, data: &[u8]) -> Result<(), ValidationError> {
-        let expected_size = self.sequence_length * std::mem::size_of::<u32>();
-        if data.len() != expected_size {
-            return Err(ValidationError::InvalidDataSize);
+        // For text input, we validate UTF-8 strings, not token arrays
+        if std::str::from_utf8(data).is_err() {
+            return Err(ValidationError::InvalidFormat);
         }
         Ok(())
     }
     
     fn tensor_type(&self) -> wasi_nn::TensorType {
-        wasi_nn::TENSOR_TYPE_F32 // Using F32 as U32 is not available in wasi-nn 0.1.0
+        wasi_nn::TENSOR_TYPE_I32 // Limited by wasi-nn 0.1.0, but data is i64
     }
 }
 
@@ -294,10 +294,21 @@ impl TextModel {
         // Create attention mask
         let attention_mask = crate::text_preprocessing::create_attention_mask(&token_ids);
         
-        // Convert to i32 for tensor (WASI-NN expects i32 for token IDs)
-        let token_ids_i32: Vec<i32> = token_ids.iter().map(|&id| id as i32).collect();
+        // Create position_ids (0, 1, 2, ..., sequence_length-1)
+        let position_ids: Vec<u32> = (0..token_ids.len() as u32).collect();
         
-        // Create input tensors
+        // Create beam_idx (single beam = [0])
+        let beam_idx: Vec<i32> = vec![0];
+        
+        // Convert to i32 for tensor (casting down from expected i64 due to wasi-nn limitations)
+        let token_ids_i32: Vec<i32> = token_ids.iter().map(|&id| id as i32).collect();
+        let attention_mask_i32: Vec<i32> = attention_mask.iter().map(|&mask| mask as i32).collect();
+        let position_ids_i32: Vec<i32> = position_ids.iter().map(|&id| id as i32).collect();
+        
+        info!("Token IDs (first 10): {:?}", &token_ids_i32[..token_ids_i32.len().min(10)]);
+        info!("Attention mask (first 10): {:?}", &attention_mask_i32[..attention_mask_i32.len().min(10)]);
+        
+        // Create input tensors with i32 data
         let input_ids_tensor = wasi_nn::Tensor {
             dimensions: &[1, token_ids_i32.len() as u32],
             r#type: wasi_nn::TENSOR_TYPE_I32,
@@ -310,25 +321,55 @@ impl TextModel {
         };
         
         let attention_mask_tensor = wasi_nn::Tensor {
-            dimensions: &[1, attention_mask.len() as u32],
+            dimensions: &[1, attention_mask_i32.len() as u32],
             r#type: wasi_nn::TENSOR_TYPE_I32,
             data: unsafe {
                 std::slice::from_raw_parts(
-                    attention_mask.as_ptr() as *const u8,
-                    attention_mask.len() * std::mem::size_of::<i32>()
+                    attention_mask_i32.as_ptr() as *const u8,
+                    attention_mask_i32.len() * std::mem::size_of::<i32>()
                 )
             },
         };
         
-        // Set inputs
+        let position_ids_tensor = wasi_nn::Tensor {
+            dimensions: &[1, position_ids_i32.len() as u32],
+            r#type: wasi_nn::TENSOR_TYPE_I32,
+            data: unsafe {
+                std::slice::from_raw_parts(
+                    position_ids_i32.as_ptr() as *const u8,
+                    position_ids_i32.len() * std::mem::size_of::<i32>()
+                )
+            },
+        };
+        
+        let beam_idx_tensor = wasi_nn::Tensor {
+            dimensions: &[], // Scalar tensor (no dimensions)
+            r#type: wasi_nn::TENSOR_TYPE_I32,
+            data: unsafe {
+                std::slice::from_raw_parts(
+                    beam_idx.as_ptr() as *const u8,
+                    beam_idx.len() * std::mem::size_of::<i32>()
+                )
+            },
+        };
+        
+        // Set inputs (order based on XML: beam_idx=0, position_ids=1, attention_mask=2, input_ids=3)
         unsafe {
-            // Set input_ids (index 0)
-            wasi_nn::set_input(self.context_ptr, 0, input_ids_tensor)
-                .map_err(|e| format!("Failed to set input_ids: {:?}", e))?;
+            // Set beam_idx (index 0)
+            wasi_nn::set_input(self.context_ptr, 0, beam_idx_tensor)
+                .map_err(|e| format!("Failed to set beam_idx: {:?}", e))?;
             
-            // Set attention_mask (index 1)
-            wasi_nn::set_input(self.context_ptr, 1, attention_mask_tensor)
+            // Set position_ids (index 1)  
+            wasi_nn::set_input(self.context_ptr, 1, position_ids_tensor)
+                .map_err(|e| format!("Failed to set position_ids: {:?}", e))?;
+            
+            // Set attention_mask (index 2)
+            wasi_nn::set_input(self.context_ptr, 2, attention_mask_tensor)
                 .map_err(|e| format!("Failed to set attention_mask: {:?}", e))?;
+            
+            // Set input_ids (index 3)
+            wasi_nn::set_input(self.context_ptr, 3, input_ids_tensor)
+                .map_err(|e| format!("Failed to set input_ids: {:?}", e))?;
             
             // Run inference
             wasi_nn::compute(self.context_ptr)
