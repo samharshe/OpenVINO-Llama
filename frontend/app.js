@@ -14,7 +14,6 @@ setInterval(rotateTitle, 500);
 
 const serverURL = "http://127.0.0.1:3000";
 
-// Mode toggle functionality
 const textModeBtn = document.getElementById('text-mode-btn');
 const imageModeBtn = document.getElementById('image-mode-btn');
 const textModeContent = document.getElementById('text-mode-content');
@@ -34,7 +33,6 @@ imageModeBtn.addEventListener('click', () => {
     textModeContent.style.display = 'none';
 });
 
-// Text mode functionality
 const chatForm = document.getElementById('chat-form');
 const chatHistory = document.getElementById('chat-history');
 const userPromptInput = document.getElementById('user-prompt');
@@ -60,6 +58,8 @@ chatForm.addEventListener('submit', async function(e) {
     
     const userMessage = userPromptInput.value.trim();
     if (!userMessage) return;
+    
+    logElement.innerHTML = '';
     
     addMessage(userMessage, true);
     userPromptInput.value = '';
@@ -90,11 +90,9 @@ chatForm.addEventListener('submit', async function(e) {
     }
 });
 
-// Image mode functionality
 const outputElement = document.querySelector('.model-output');
 const logElement = document.querySelector('.under-the-hood-logs');
 
-// SSE for logs
 const eventSource = new EventSource(serverURL + "/logs");
 
 eventSource.onopen = (event) => {
@@ -111,13 +109,12 @@ eventSource.onerror = (err) => {
     console.error("SSE Error:", err);
 };
 
-// Image click handlers
 document.querySelectorAll('.gallery img').forEach(img => {
     img.addEventListener('click', async function() {
-        logElement.innerHTML = ``;
+        logElement.innerHTML = '';
         outputElement.innerHTML = `Processing...`;
 
-        logElement.innerHTML += `${new Date().toLocaleTimeString('en-US', {hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'})}.${new Date().getMilliseconds().toString().padStart(3, '0').slice(0, 2)}: [webapp/app.js] Sending inference request for ${this.alt || 'image'}.<br>`;
+        logElement.innerHTML += `${new Date().toLocaleTimeString('en-US', {hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'})}.${new Date().getMilliseconds().toString().padStart(3, '0').slice(0, 2)}: [frontend/app.js] Sending inference request for ${this.alt || 'image'}.<br>`;
 
         try {
             const response = await fetch(this.src);
@@ -149,7 +146,6 @@ document.querySelectorAll('.gallery img').forEach(img => {
     });
 });
 
-// Drag and drop for last image
 const lastImage = document.querySelector('.gallery img:last-child');
 lastImage.addEventListener('dragover', (e) => {
     e.preventDefault();
