@@ -5,6 +5,9 @@ from openvino import Type, PartialShape, Core
 import os
 from pathlib import Path
 
+# Initialize OpenVINO Core
+core = Core()
+
 # Model configuration
 model_id = "Qwen/Qwen3-0.6B"
 output_dir = Path("../backend/server/fixture/text_model")
