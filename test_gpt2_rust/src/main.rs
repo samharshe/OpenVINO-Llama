@@ -28,7 +28,7 @@ fn test_tokenizer() -> Result<()> {
         Err(e) => println!("✗ Minimal tokenizer failed: {}", e),
     }
     
-    // Now try the real tokenizer (using the newly downloaded one)
+    // Now try the real tokenizer (our final export)
     let tokenizer_bytes = fs::read("ov_ir/tokenizer.json")?;
     let tokenizer = Tokenizer::from_bytes(&tokenizer_bytes)
         .map_err(|e| anyhow::anyhow!("Failed to load tokenizer: {}", e))?;
