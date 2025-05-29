@@ -45,55 +45,42 @@ fn ensure_registry() -> Result<u32, String> {
         let id = registry.register_model(RegisteredModel::ImageNet(model), metadata);
         info!("Default image model loaded with ID: {}", id);
         
-        // Register the TinyLlama text model
-        if let Ok(tokenizer_json) = std::fs::read("fixture/text_model/tokenizer.json") {
-            info!("Found tokenizer.json, attempting to load TinyLlama model...");
-            
-            // Load real model files
-            let xml = match std::fs::read("fixture/text_model/openvino_model.xml") {
-                Ok(data) => data,
-                Err(e) => {
-                    warn!("Failed to load text model XML: {}. Text inference unavailable.", e);
-                    return Ok(id);
-                }
-            };
-            
-            let weights = match std::fs::read("fixture/text_model/openvino_model.bin") {
-                Ok(data) => data,
-                Err(e) => {
-                    warn!("Failed to load text model weights: {}. Text inference unavailable.", e);
-                    return Ok(id);
-                }
-            };
-            
-            info!("Loaded TinyLlama model files - XML: {} bytes, weights: {} bytes", 
-                 xml.len(), weights.len());
-            
-            match TextModel::from_buffer_with_tokenizer(
-                xml, 
-                weights, 
-                tokenizer_json
-            ) {
-                Ok((text_model, tokenizer)) => {
-                    let text_metadata = ModelMetadata {
-                        name: "tinyllama-1.1b-chat".to_string(),
-                        version: "v1.0-int4".to_string(),
-                        model_type: "text".to_string(),
-                    };
-                    let text_id = registry.register_model(
-                        RegisteredModel::Text { model: text_model, tokenizer },
-                        text_metadata
-                    );
-                    info!("TinyLlama model loaded successfully with ID: {}", text_id);
-                },
-                Err(e) => {
-                    warn!("Failed to load TinyLlama model: {}. Text inference will not work.", e);
-                }
-            }
-        }
+        // Load text model (unconditionally, fail if not available)
+        info!("Loading TinyLlama text model...");
+        
+        let tokenizer_json = std::fs::read("fixture/text_model/tokenizer.json")
+            .map_err(|e| format!("Failed to read tokenizer.json: {}", e))?;
+        
+        let xml = std::fs::read("fixture/text_model/openvino_model.xml")
+            .map_err(|e| format!("Failed to read text model XML: {}", e))?;
+        
+        let weights = std::fs::read("fixture/text_model/openvino_model.bin")
+            .map_err(|e| format!("Failed to read text model weights: {}", e))?;
+        
+        info!("Loaded TinyLlama model files - XML: {} bytes, weights: {} bytes", 
+             xml.len(), weights.len());
+        
+        let (text_model, tokenizer) = TextModel::from_buffer_with_tokenizer(
+            xml, 
+            weights, 
+            tokenizer_json
+        ).map_err(|e| format!("Failed to create text model: {}", e))?;
+        
+        let text_metadata = ModelMetadata {
+            name: "tinyllama-1.1b-chat".to_string(),
+            version: "v1.0-int4".to_string(),
+            model_type: "text".to_string(),
+        };
+        
+        let text_id = registry.register_model(
+            RegisteredModel::Text { model: text_model, tokenizer },
+            text_metadata
+        );
+        
+        info!("TinyLlama model loaded successfully with ID: {}", text_id);
         
         
-        Ok(id)
+        Ok(1) // Return ID of first model (image model)
     } else {
         Ok(1) // Return ID of first model
     }
