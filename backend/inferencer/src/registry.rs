@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use log::info;
 use serde::{Deserialize, Serialize};
-use crate::{Model, ImageNetConfig, TextModelConfig, imagenet_labels, text_preprocessing};
+use crate::{Model, ImageNetConfig, imagenet_labels};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ModelMetadata {
@@ -12,10 +12,6 @@ pub struct ModelMetadata {
 
 pub enum RegisteredModel {
     ImageNet(Model<ImageNetConfig>),
-    Text {
-        model: Model<TextModelConfig>,
-        tokenizer: tokenizers::tokenizer::Tokenizer,
-    },
 }
 
 impl RegisteredModel {
@@ -50,35 +46,6 @@ impl RegisteredModel {
                     "metadata": {
                         "probability": confidence,
                         "class_index": class_idx
-                    },
-                    "model_info": {
-                        "name": metadata.name,
-                        "version": metadata.version,
-                        "model_type": metadata.model_type
-                    }
-                }))
-            }
-            RegisteredModel::Text { model, tokenizer } => {
-                // Check if input is valid UTF-8 text
-                if !text_preprocessing::is_text(data) {
-                    return Err("Invalid input: expected UTF-8 text".to_string());
-                }
-                
-                info!("Processing text input");
-                let output = model.infer_from_text(data, tokenizer)?;
-                
-                // Count tokens for metadata
-                let text = std::str::from_utf8(data).unwrap(); // Safe because we validated above
-                let encoding = tokenizer.encode(text, false)
-                    .map_err(|e| format!("Tokenization failed: {}", e))?;
-                let token_count = encoding.get_ids().len();
-                
-                Ok(serde_json::json!({
-                    "output": output,
-                    "metadata": {
-                        "token_count": token_count,
-                        "inference_time_ms": 0, // Placeholder - would need timing
-                        "temperature": 0.7 // Placeholder - would come from model config
                     },
                     "model_info": {
                         "name": metadata.name,
