@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use wasmtime::{Engine, Module};
 use tokio::sync::broadcast;
 
@@ -63,6 +63,7 @@ pub struct ImageModelConfig {
     log_sender: broadcast::Sender<String>,
     name: String,
     version: String,
+    instance: Mutex<WasmInstance>,
 }
 
 impl ImageModelConfig {
@@ -73,12 +74,16 @@ impl ImageModelConfig {
         name: String,
         version: String,
     ) -> Self {
+        let instance = WasmInstance::new(engine.clone(), module.clone())
+            .expect("Failed to create WASM instance for image model");
+        
         Self {
             engine,
             module,
             log_sender,
             name,
             version,
+            instance: Mutex::new(instance),
         }
     }
 }
@@ -104,14 +109,12 @@ impl ModelConfig for ImageModelConfig {
         // Pass raw JPEG directly to WASM (WASM handles preprocessing now)
         self.log_sender.send("[ImageModelConfig] Passing raw JPEG to WASM for inference.".to_string()).ok();
         
-        // Create WASM instance and run inference
-        self.log_sender.send("[ImageModelConfig] Creating WASM instance for inference.".to_string()).ok();
-        let mut wasm_instance = WasmInstance::new(self.engine.clone(), self.module.clone())
-            .map_err(|e| InferenceError::ModelLoadFailed(e.to_string()))?;
+        // Use existing instance instead of creating new one
+        let mut instance = self.instance.lock().unwrap();
         
         // Run inference on raw JPEG data
         self.log_sender.send("[ImageModelConfig] Running inference on raw JPEG data.".to_string()).ok();
-        let result = wasm_instance.infer(data.to_vec())
+        let result = instance.infer(data.to_vec())
             .map_err(|e| InferenceError::InferenceFailed(e.to_string()))?;
         
         self.log_sender.send("[ImageModelConfig] Inference complete, returning result.".to_string()).ok();
