@@ -2,9 +2,13 @@
 
 import tensorflow as tf
 import numpy as np
+from transformers import GPT2TokenizerFast
 
 def test_gpt2_tflite():
     """Test the GPT-2 TFLite model with basic inference."""
+    
+    # Load the tokenizer
+    tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
     
     # Load the TFLite model
     model_path = "ov_ir/gpt2-8bit.tflite"
@@ -36,28 +40,31 @@ def test_gpt2_tflite():
         print(f"  Type: {detail['dtype']}")
         print(f"  Index: {detail['index']}")
     
-    # Create sample input (assuming token IDs)
-    # For GPT-2, typical input is token IDs with shape [batch_size, sequence_length]
+    # Create sample input using tokenizer
     input_shape = input_details[0]['shape']
     print(f"\n=== Test Inference ===")
     print(f"Input shape: {input_shape}")
     
-    # Create dummy input - simple sequence of token IDs
-    if len(input_shape) == 2:
-        batch_size, seq_len = input_shape
-        # Use some common token IDs (e.g., for "Hello world")
-        sample_input = np.array([[15496, 995]], dtype=input_details[0]['dtype'])
-        if sample_input.shape[1] < seq_len:
-            # Pad with zeros if needed
-            padding = np.zeros((batch_size, seq_len - sample_input.shape[1]), dtype=input_details[0]['dtype'])
-            sample_input = np.concatenate([sample_input, padding], axis=1)
-    else:
-        # Fallback: create zeros with the expected shape
-        sample_input = np.zeros(input_shape, dtype=input_details[0]['dtype'])
+    # Use a meaningful prompt
+    prompt = "The quick brown fox"
+    print(f"Input prompt: '{prompt}'")
     
-    print(f"Sample input shape: {sample_input.shape}")
-    print(f"Sample input dtype: {sample_input.dtype}")
-    print(f"Sample input: {sample_input}")
+    # Tokenize the input
+    tokens = tokenizer.encode(prompt, return_tensors="np")
+    print(f"Tokenized: {tokens[0].tolist()}")
+    print(f"Tokens as text: {[tokenizer.decode([t]) for t in tokens[0]]}")
+    
+    # Pad or truncate to fit model input shape
+    batch_size, seq_len = input_shape
+    if tokens.shape[1] > seq_len:
+        tokens = tokens[:, :seq_len]
+    elif tokens.shape[1] < seq_len:
+        padding = np.zeros((batch_size, seq_len - tokens.shape[1]), dtype=input_details[0]['dtype'])
+        tokens = np.concatenate([tokens, padding], axis=1)
+    
+    sample_input = tokens.astype(input_details[0]['dtype'])
+    print(f"Padded input shape: {sample_input.shape}")
+    print(f"Padded input: {sample_input[0][:10]}... (showing first 10 tokens)")
     
     # Set input tensor
     interpreter.set_tensor(input_details[0]['index'], sample_input)
@@ -72,11 +79,37 @@ def test_gpt2_tflite():
     print(f"Output dtype: {output_data.dtype}")
     print(f"Output min/max: {output_data.min():.4f} / {output_data.max():.4f}")
     
-    # Show first few logits if it's a typical language model output
+    # Decode the output to see generated text
     if len(output_data.shape) == 3:  # [batch, seq, vocab]
-        print(f"First 10 logits for last position: {output_data[0, -1, :10]}")
+        # Get logits for the last non-padded position
+        input_length = len(tokens[0])
+        last_logits = output_data[0, input_length - 1, :]  # Last input position
+        
+        # Get top 5 predicted tokens
+        top_k = 5
+        top_indices = np.argsort(last_logits)[-top_k:][::-1]
+        
+        # Apply temperature scaling and softmax more safely
+        scaled_logits = last_logits[top_indices] - np.max(last_logits[top_indices])
+        exp_logits = np.exp(scaled_logits)
+        top_probs = exp_logits / np.sum(exp_logits)
+        
+        print(f"\n=== Next Token Predictions ===")
+        print(f"Input text: '{prompt}'")
+        print(f"Top {top_k} next token predictions:")
+        for i, (idx, prob) in enumerate(zip(top_indices, top_probs)):
+            token_text = tokenizer.decode([idx])
+            print(f"  {i+1}. Token {idx}: '{token_text}' (prob: {prob:.3f})")
+        
+        # Generate next token (greedy)
+        next_token = top_indices[0]
+        generated_text = prompt + tokenizer.decode([next_token])
+        print(f"Generated text (1 token): '{generated_text}'")
+        
     elif len(output_data.shape) == 2:  # [batch, vocab]
-        print(f"First 10 logits: {output_data[0, :10]}")
+        top_k = 5
+        top_indices = np.argsort(output_data[0])[-top_k:][::-1]
+        print(f"Top {top_k} predicted tokens: {[tokenizer.decode([idx]) for idx in top_indices]}")
     
     print("\n=== Memory Usage ===")
     # Estimate memory usage
