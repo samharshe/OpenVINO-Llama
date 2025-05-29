@@ -58,8 +58,6 @@ pub trait ModelConfig: Send + Sync {
 }
 
 pub struct ImageModelConfig {
-    engine: Arc<Engine>,
-    module: Arc<Module>,
     log_sender: broadcast::Sender<String>,
     name: String,
     version: String,
@@ -78,8 +76,6 @@ impl ImageModelConfig {
             .expect("Failed to create WASM instance for image model");
         
         Self {
-            engine,
-            module,
             log_sender,
             name,
             version,
@@ -131,8 +127,6 @@ impl ModelConfig for ImageModelConfig {
 }
 
 pub struct TextModelConfig {
-    engine: Arc<Engine>,
-    module: Arc<Module>,
     log_sender: broadcast::Sender<String>,
     name: String,
     version: String,
@@ -151,8 +145,6 @@ impl TextModelConfig {
             .expect("Failed to create WASM instance for text model");
         
         Self {
-            engine,
-            module,
             log_sender,
             name,
             version,

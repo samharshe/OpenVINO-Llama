@@ -1,5 +1,5 @@
 use std::{fs, sync::Mutex};
-use log::{error, info, warn};
+use log::{error, info};
 
 use inferencer::{MobilnetModel, TextModel, registry::{ModelRegistry, RegisteredModel, ModelMetadata}, preprocessing, text_preprocessing};
 
