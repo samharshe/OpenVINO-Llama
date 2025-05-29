@@ -136,6 +136,7 @@ pub struct TextModelConfig {
     log_sender: broadcast::Sender<String>,
     name: String,
     version: String,
+    instance: Mutex<WasmInstance>,
 }
 
 impl TextModelConfig {
@@ -146,12 +147,16 @@ impl TextModelConfig {
         name: String,
         version: String,
     ) -> Self {
+        let instance = WasmInstance::new(engine.clone(), module.clone())
+            .expect("Failed to create WASM instance for text model");
+        
         Self {
             engine,
             module,
             log_sender,
             name,
             version,
+            instance: Mutex::new(instance),
         }
     }
 }
@@ -178,14 +183,12 @@ impl ModelConfig for TextModelConfig {
         // Pass raw UTF-8 text directly to WASM (WASM handles tokenization now)
         self.log_sender.send("[TextModelConfig] Passing raw text to WASM for inference.".to_string()).ok();
         
-        // Create WASM instance and run inference
-        self.log_sender.send("[TextModelConfig] Creating WASM instance for text inference.".to_string()).ok();
-        let mut wasm_instance = WasmInstance::new(self.engine.clone(), self.module.clone())
-            .map_err(|e| InferenceError::ModelLoadFailed(e.to_string()))?;
+        // Use existing instance instead of creating new one
+        let mut instance = self.instance.lock().unwrap();
         
         // Run inference on raw text data
         self.log_sender.send("[TextModelConfig] Running inference on text data.".to_string()).ok();
-        let result = wasm_instance.infer(data.to_vec())
+        let result = instance.infer(data.to_vec())
             .map_err(|e| InferenceError::InferenceFailed(e.to_string()))?;
         
         self.log_sender.send("[TextModelConfig] Text inference complete, returning result.".to_string()).ok();
