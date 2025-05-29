@@ -12,20 +12,21 @@ fn load_tokenizer() -> Result<Tokenizer> {
     Ok(tokenizer)
 }
 
-fn tokenize_input(tokenizer: &Tokenizer, text: &str) -> Result<Vec<i32>> {
+fn tokenize_input(tokenizer: &Tokenizer, text: &str) -> Result<(Vec<i32>, usize)> {
     let encoding = tokenizer.encode(text, false)
         .map_err(|e| anyhow::anyhow!("Failed to encode text: {}", e))?;
     let tokens = encoding.get_ids();
     
     // Convert to i32 and pad to 64 tokens
     let mut padded_tokens: Vec<i32> = tokens.iter().map(|&t| t as i32).collect();
+    let actual_length = tokens.len();
     padded_tokens.resize(64, 0);
     
     println!("Input: '{}'", text);
     println!("Tokens: {:?}", &tokens);
-    println!("Padded to 64 tokens");
+    println!("Token count: {}, padded to 64", actual_length);
     
-    Ok(padded_tokens)
+    Ok((padded_tokens, actual_length))
 }
 
 fn setup_model() -> Result<(Core, openvino::CompiledModel)> {
@@ -95,12 +96,11 @@ fn run_inference(compiled_model: &mut openvino::CompiledModel, input_tokens: Vec
     Ok(output_data)
 }
 
-fn get_next_token(logits: &[f32]) -> usize {
+fn get_next_token(logits: &[f32], last_token_pos: usize) -> usize {
     let vocab_size = 50257;
-    let seq_len = 64;
     
-    // Get logits for the last token position (position 63)
-    let last_pos_start = (seq_len - 1) * vocab_size;
+    // Get logits for the actual last token position, not the padded end
+    let last_pos_start = last_token_pos * vocab_size;
     let last_logits = &logits[last_pos_start..last_pos_start + vocab_size];
     
     // Find argmax (greedy decoding)
@@ -121,8 +121,8 @@ fn get_next_token(logits: &[f32]) -> usize {
         .map(|(i, _)| i)
         .unwrap_or(1);
     
-    println!("Token {}: {:.6}, Token {}: {:.6}", 
-             max_idx, max_val, second_idx, last_logits[second_idx]);
+    println!("Reading from position {}: Token {}: {:.6}, Token {}: {:.6}", 
+             last_token_pos, max_idx, max_val, second_idx, last_logits[second_idx]);
     
     max_idx
 }
@@ -137,7 +137,7 @@ fn generate_text(
     println!("Prompt: '{}'", prompt);
     
     // Tokenize prompt
-    let mut tokens = tokenize_input(tokenizer, prompt)?;
+    let (mut tokens, mut current_length) = tokenize_input(tokenizer, prompt)?;
     let mut generated_tokens = Vec::new();
     
     // Generate tokens one by one
@@ -147,8 +147,9 @@ fn generate_text(
         // Run inference
         let logits = run_inference(compiled_model, tokens.clone())?;
         
-        // Get next token
-        let next_token = get_next_token(&logits);
+        // Get next token from the correct position (last real token)
+        let last_token_pos = current_length - 1;
+        let next_token = get_next_token(&logits, last_token_pos);
         generated_tokens.push(next_token as u32);
         
         // Decode and show progress
@@ -156,11 +157,19 @@ fn generate_text(
             .map_err(|e| anyhow::anyhow!("Decode error: {}", e))?;
         println!("Generated token: {} -> Current text: '{}'", next_token, decoded);
         
-        // Update input for next iteration (sliding window)
-        for j in 0..63 {
-            tokens[j] = tokens[j + 1];
+        // Update input for next iteration
+        if current_length < 64 {
+            // Still have room, just append
+            tokens[current_length] = next_token as i32;
+            current_length += 1;
+        } else {
+            // Sliding window: shift left and add new token
+            for j in 0..63 {
+                tokens[j] = tokens[j + 1];
+            }
+            tokens[63] = next_token as i32;
+            // current_length stays 64
         }
-        tokens[63] = next_token as i32;
         
         // Stop if we hit end token
         if next_token == 50256 {
@@ -202,13 +211,13 @@ fn main() -> Result<()> {
     println!("=== Testing Logit Variation ===");
     for prompt in &prompts {
         println!("\nPrompt: '{}'", prompt);
-        let tokens = tokenize_input(&tokenizer, prompt)?;
+        let (tokens, length) = tokenize_input(&tokenizer, prompt)?;
         let logits = run_inference(&mut compiled_model, tokens)?;
-        let _token = get_next_token(&logits);
+        let _token = get_next_token(&logits, length - 1);
     }
     
     println!("\n=== Full Generation Test ===");
-    let prompt = "The quick brown fox";
+    let prompt = "Python is a ";
     let generated = generate_text(&tokenizer, &mut compiled_model, prompt, 3)?;
     
     println!("\n=== Final Result ===");
