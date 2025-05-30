@@ -3,8 +3,6 @@ use log::{error, info};
 
 use inferencer::{MobilnetModel, registry::{ModelRegistry, RegisteredModel, ModelMetadata}};
 
-// Removed hardcoded ImageNet labels - models should handle their own output formatting
-
 static MODEL_REGISTRY: Mutex<Option<ModelRegistry>> = Mutex::new(None);
 
 fn main() {
