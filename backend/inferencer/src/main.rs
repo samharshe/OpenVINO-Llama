@@ -1,9 +1,7 @@
 use std::{fs, sync::Mutex};
-use log::{error, info, warn};
+use log::{error, info};
 
-use inferencer::{MobilnetModel, TextModel, registry::{ModelRegistry, RegisteredModel, ModelMetadata}, preprocessing, text_preprocessing};
-
-// Removed hardcoded ImageNet labels - models should handle their own output formatting
+use inferencer::{MobilnetModel, registry::{ModelRegistry, RegisteredModel, ModelMetadata}};
 
 static MODEL_REGISTRY: Mutex<Option<ModelRegistry>> = Mutex::new(None);
 
@@ -44,41 +42,6 @@ fn ensure_registry() -> Result<u32, String> {
         
         let id = registry.register_model(RegisteredModel::ImageNet(model), metadata);
         info!("Default image model loaded with ID: {}", id);
-        
-        // Load text model (unconditionally, fail if not available)
-        info!("Loading TinyLlama text model...");
-        
-        let tokenizer_json = std::fs::read("fixture/text_model/tokenizer.json")
-            .map_err(|e| format!("Failed to read tokenizer.json: {}", e))?;
-        
-        let xml = std::fs::read("fixture/text_model/openvino_model.xml")
-            .map_err(|e| format!("Failed to read text model XML: {}", e))?;
-        
-        let weights = std::fs::read("fixture/text_model/openvino_model.bin")
-            .map_err(|e| format!("Failed to read text model weights: {}", e))?;
-        
-        info!("Loaded TinyLlama model files - XML: {} bytes, weights: {} bytes", 
-             xml.len(), weights.len());
-        
-        let (text_model, tokenizer) = TextModel::from_buffer_with_tokenizer(
-            xml, 
-            weights, 
-            tokenizer_json
-        ).map_err(|e| format!("Failed to create text model: {}", e))?;
-        
-        let text_metadata = ModelMetadata {
-            name: "tinyllama-1.1b-chat".to_string(),
-            version: "v1.0-int4".to_string(),
-            model_type: "text".to_string(),
-        };
-        
-        let text_id = registry.register_model(
-            RegisteredModel::Text { model: text_model, tokenizer },
-            text_metadata
-        );
-        
-        info!("TinyLlama model loaded successfully with ID: {}", text_id);
-        
         
         Ok(1) // Return ID of first model (image model)
     } else {
@@ -129,21 +92,8 @@ pub extern "C" fn load_model(_xml_ptr: i32, _xml_len: i32, _weights_ptr: i32, _w
 
 #[no_mangle]
 pub extern "C" fn infer(data_ptr: i32, data_len: i32, result_ptr: i32) -> i32 {
-    // Auto-detect input type and route to appropriate model
-    let data = unsafe { std::slice::from_raw_parts(data_ptr as *const u8, data_len as usize) };
-    
-    // Detect input type
-    let model_id = if preprocessing::is_jpeg(data) || preprocessing::is_tensor(data) {
-        1 // Image model
-    } else if text_preprocessing::is_text(data) {
-        2 // Text model (if registered)
-    } else {
-        error!("Unable to detect input type");
-        return -1;
-    };
-    
-    info!("Auto-detected model ID: {} for input", model_id);
-    infer_with_model(data_ptr, data_len, result_ptr, model_id)
+    // For now, always use the image model
+    infer_with_model(data_ptr, data_len, result_ptr, 1)
 }
 
 #[no_mangle]
@@ -196,64 +146,3 @@ pub extern "C" fn infer_with_model(data_ptr: i32, data_len: i32, result_ptr: i32
     0 // Success
 }
 
-#[no_mangle]
-pub extern "C" fn register_text_model(
-    xml_ptr: i32, 
-    xml_len: i32, 
-    weights_ptr: i32, 
-    weights_len: i32,
-    tokenizer_ptr: i32,
-    tokenizer_len: i32,
-    metadata_ptr: i32,
-    metadata_len: i32
-) -> i32 {
-    // Validate parameters
-    if xml_ptr == 0 || xml_len <= 0 || weights_ptr == 0 || weights_len <= 0 ||
-       tokenizer_ptr == 0 || tokenizer_len <= 0 || metadata_ptr == 0 || metadata_len <= 0 {
-        error!("Invalid parameters for text model registration");
-        return -1;
-    }
-    
-    // Get data slices
-    let xml = unsafe { std::slice::from_raw_parts(xml_ptr as *const u8, xml_len as usize) };
-    let weights = unsafe { std::slice::from_raw_parts(weights_ptr as *const u8, weights_len as usize) };
-    let tokenizer_json = unsafe { std::slice::from_raw_parts(tokenizer_ptr as *const u8, tokenizer_len as usize) };
-    let metadata_bytes = unsafe { std::slice::from_raw_parts(metadata_ptr as *const u8, metadata_len as usize) };
-    
-    // Parse metadata
-    let metadata: ModelMetadata = match serde_json::from_slice(metadata_bytes) {
-        Ok(m) => m,
-        Err(e) => {
-            error!("Failed to parse metadata: {}", e);
-            return -2;
-        }
-    };
-    
-    // Create text model with tokenizer
-    let (model, tokenizer) = match TextModel::from_buffer_with_tokenizer(
-        xml.to_vec(), 
-        weights.to_vec(), 
-        tokenizer_json.to_vec()
-    ) {
-        Ok((m, t)) => (m, t),
-        Err(e) => {
-            error!("Failed to create text model: {}", e);
-            return -3;
-        }
-    };
-    
-    // Register in the registry
-    let mut registry_guard = MODEL_REGISTRY.lock().unwrap();
-    if registry_guard.is_none() {
-        *registry_guard = Some(ModelRegistry::new());
-    }
-    let registry = registry_guard.as_mut().unwrap();
-    
-    let id = registry.register_model(
-        RegisteredModel::Text { model, tokenizer },
-        metadata
-    );
-    
-    info!("Text model registered with ID: {}", id);
-    id as i32
-}
