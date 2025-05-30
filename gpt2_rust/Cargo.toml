@@ -3,9 +3,12 @@ name = "test_gpt2_rust"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+crate-type = ["cdylib"]
+
 [dependencies]
-tokenizers = "0.19"
+tokenizers = { version = "0.19", default-features = false, features = ["unstable_wasm"] }
 anyhow = "1.0"
 serde_json = "1.0"
-openvino = "0.8.0"
-ndarray = "0.15"
+wasi-nn = "0.1.0"
+wasm-logger = "0.2"
